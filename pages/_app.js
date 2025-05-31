@@ -9,7 +9,7 @@ export default function App({ Component, pageProps }) {
       clientId={process.env.AUTH0_CLIENT_ID}
       authorizationParams={{
         redirect_uri: typeof window !== 'undefined' ? window.location.origin : '',
-        audience: process.env.AUTH0_AUDIENCE,
+        audience: `https://${process.env.AUTH0_ISSUER_BASE_URL?.replace('https://', '')}/api/v2/`,
         scope: 'openid profile email'
       }}
     >
