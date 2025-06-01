@@ -15,6 +15,8 @@ export default function DataTable() {
   const [isPolling, setIsPolling] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const reconnectTimeoutRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
   const { getAccessTokenSilently } = useAuth0();
 
   // Константы
@@ -341,6 +343,12 @@ export default function DataTable() {
         eventSourceRef.current.close();
       }
       
+      // Очищаем pending reconnect
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      
       // Создаем новое SSE соединение с токеном в query параметре
       const sseUrl = `/api/webhook/drive-changes?token=${encodeURIComponent(token)}`;
       console.log('SSE: Connecting to:', sseUrl);
@@ -351,6 +359,7 @@ export default function DataTable() {
         console.log('SSE: Connection opened successfully');
         setConnectionStatus('connected');
         setError(null);
+        reconnectAttemptsRef.current = 0; // Reset on successful connection
       };
       
       eventSource.onmessage = (event) => {
@@ -387,18 +396,25 @@ export default function DataTable() {
         
         setConnectionStatus('error');
         
-        // Если соединение постоянно падает, переключаемся на polling
-        if (eventSource.readyState === EventSource.CLOSED) {
-          console.log('SSE: Connection closed, falling back to polling');
+        // Если соединение закрыто или слишком много попыток подключения
+        if (eventSource.readyState === EventSource.CLOSED || reconnectAttemptsRef.current >= 5) {
+          console.log('SSE: Connection permanently closed or too many attempts, falling back to polling');
           setPushEnabled(false);
           startPolling();
-        } else {
-          // Пытаемся переподключиться через 5 секунд
-          setTimeout(() => {
-            console.log('SSE: Attempting to reconnect...');
-            connectToSSE();
-          }, 5000);
+          return;
         }
+        
+        // Exponential backoff для reconnect
+        reconnectAttemptsRef.current++;
+        const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000); // Max 30s
+        
+        console.log(`SSE: Attempting to reconnect in ${backoffDelay}ms (attempt ${reconnectAttemptsRef.current})`);
+        
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (pushEnabled) { // Only reconnect if still in push mode
+            connectToSSE();
+          }
+        }, backoffDelay);
       };
       
       eventSourceRef.current = eventSource;
@@ -407,10 +423,23 @@ export default function DataTable() {
       console.error('SSE: Error setting up connection:', error);
       setConnectionStatus('error');
       
-      // Fallback на polling
-      console.log('SSE: Falling back to polling due to setup error');
-      setPushEnabled(false);
-      startPolling();
+      // Exponential backoff for setup errors too
+      reconnectAttemptsRef.current++;
+      if (reconnectAttemptsRef.current >= 5) {
+        console.log('SSE: Too many setup failures, falling back to polling');
+        setPushEnabled(false);
+        startPolling();
+        return;
+      }
+      
+      const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+      console.log(`SSE: Retrying setup in ${backoffDelay}ms`);
+      
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (pushEnabled) {
+          connectToSSE();
+        }
+      }, backoffDelay);
     }
   };
 
@@ -422,6 +451,13 @@ export default function DataTable() {
       setConnectionStatus('disconnected');
       console.log('SSE disconnected');
     }
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    reconnectAttemptsRef.current = 0;
   };
 
   if (loading) {
