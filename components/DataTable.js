@@ -21,7 +21,7 @@ export default function DataTable() {
 
   // Константы
   const WRITE_DEBOUNCE = 500; // 0.5 сек дебаунс для записей
-  const FALLBACK_POLL_INTERVAL = 30000; // Fallback polling каждые 30 сек
+  const FALLBACK_POLL_INTERVAL = 5000; // Fallback polling каждые 5 сек
 
   // Загрузка данных
   const loadData = async (showLoader = false) => {
@@ -98,15 +98,15 @@ export default function DataTable() {
   useEffect(() => {
     // Первоначальная загрузка данных
     loadData(true).then(async () => {
-      // Пытаемся настроить push уведомления
+      // Всегда запускаем polling каждые 5 сек
+      startPolling();
+      
+      // Дополнительно пытаемся настроить push уведомления для мгновенных обновлений
       const pushSetup = await setupPushNotifications();
       
       if (pushSetup) {
-        // Если push уведомления настроены, подключаемся к SSE
+        // Если push уведомления настроены, подключаемся к SSE для мгновенных обновлений
         await connectToSSE();
-      } else {
-        // Fallback на polling
-        startPolling();
       }
     });
     
@@ -130,19 +130,17 @@ export default function DataTable() {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         // При потере фокуса - останавливаем соединения
-        if (pushEnabled) {
-          stopSSE();
-        } else {
-          stopPolling();
-        }
+        stopSSE();
+        stopPolling();
       } else {
         // При возврате фокуса - обновляем данные и возобновляем соединения
         loadData(false);
         
+        // Всегда перезапускаем polling
+        startPolling();
+        
         if (pushEnabled) {
           connectToSSE();
-        } else {
-          startPolling();
         }
       }
     };
@@ -398,9 +396,8 @@ export default function DataTable() {
         
         // Если соединение закрыто или слишком много попыток подключения
         if (eventSource.readyState === EventSource.CLOSED || reconnectAttemptsRef.current >= 5) {
-          console.log('SSE: Connection permanently closed or too many attempts, falling back to polling');
+          console.log('SSE: Connection permanently closed or too many attempts, disabling push notifications');
           setPushEnabled(false);
-          startPolling();
           return;
         }
         
@@ -426,9 +423,8 @@ export default function DataTable() {
       // Exponential backoff for setup errors too
       reconnectAttemptsRef.current++;
       if (reconnectAttemptsRef.current >= 5) {
-        console.log('SSE: Too many setup failures, falling back to polling');
+        console.log('SSE: Too many setup failures, disabling push notifications');
         setPushEnabled(false);
-        startPolling();
         return;
       }
       
@@ -533,4 +529,4 @@ export default function DataTable() {
       </div>
     </div>
   );
-} 
+}
