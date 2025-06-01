@@ -5,7 +5,7 @@ export default function Document() {
     <Html lang="ru">
       <Head>
         {/* Google Search Console verification */}
-        <<meta name="google-site-verification" content="PZey3Epku-MzPhMwYbglNejvRJYEMrjyxbFXFM2T2VQ" />
+        <meta name="google-site-verification" content="PZey3Epku-MzPhMwYbglNejvRJYEMrjyxbFXFM2T2VQ" />
         
         {/* Дополнительные meta теги */}
         <meta name="description" content="Google Таблица с Auth0 авторизацией и real-time обновлениями" />
