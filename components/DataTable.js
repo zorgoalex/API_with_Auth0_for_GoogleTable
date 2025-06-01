@@ -473,22 +473,8 @@ export default function DataTable() {
       <div className="status-bar">
         <div className="status-indicator">
           <span className={`status-dot ${
-            connectionStatus === 'connected' && pushEnabled ? 'success' :
-            isPolling ? 'polling' : 
-            error ? 'error' : 
-            connectionStatus === 'error' ? 'error' : 'success'
+            (connectionStatus === 'connected' && pushEnabled) || !error ? 'success' : 'error'
           }`}></span>
-          <span className="status-text">
-            {pushEnabled ? (
-              connectionStatus === 'connected' ? 'Real-time обновления активны' :
-              connectionStatus === 'error' ? 'Ошибка real-time, используется polling' :
-              'Подключение к real-time...'
-            ) : (
-              isPolling ? 'Проверка обновлений...' : 
-              error ? `Ошибка: ${error}` : 
-              'Polling активен'
-            )}
-          </span>
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
