@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { verifyAuth } from '../../lib/auth';
+import { requireAuth } from '../../lib/auth';
 
 export default async function handler(req, res) {
   console.log('=== SETUP PUSH START ===');
@@ -14,10 +14,10 @@ export default async function handler(req, res) {
     
     // Проверяем авторизацию
     console.log('2. Checking authorization...');
-    const user = await verifyAuth(req);
+    const user = await requireAuth(req, res);
     if (!user) {
-      console.error('Authentication failed');
-      return res.status(401).json({ error: 'Unauthorized' });
+      // requireAuth already sent 401 response, just return
+      return;
     }
     console.log('User authenticated:', user?.email || user?.sub);
 
