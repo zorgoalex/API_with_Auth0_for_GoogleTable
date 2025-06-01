@@ -2,7 +2,7 @@ import { google } from 'googleapis';
 import { verifyAuth } from '../../lib/auth';
 
 export default async function handler(req, res) {
-  console.log('=== SETUP PUSH DEBUG START ===');
+  console.log('=== SETUP PUSH START ===');
   
   if (req.method !== 'POST') {
     console.log('Method not POST:', req.method);
@@ -10,25 +10,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    console.log('1. Starting setup push notifications...');
+    console.log('1. Starting push notification setup...');
     
-    // Временно пропускаем auth для диагностики
-    console.log('2. Skipping auth for debug...');
-    /*
+    // Проверяем авторизацию
+    console.log('2. Checking authorization...');
     const user = await verifyAuth(req);
     if (!user) {
       console.error('Authentication failed');
       return res.status(401).json({ error: 'Unauthorized' });
     }
-    console.log('User authenticated:', user);
-    */
+    console.log('User authenticated:', user?.email || user?.sub);
 
     // Проверяем переменные окружения
     console.log('3. Checking environment variables...');
-    console.log('GOOGLE_CREDENTIALS exists:', !!process.env.GOOGLE_CREDENTIALS);
-    console.log('GOOGLE_SHEET_ID:', process.env.GOOGLE_SHEET_ID);
-    console.log('AUTH0_BASE_URL:', process.env.AUTH0_BASE_URL);
-    
     if (!process.env.GOOGLE_CREDENTIALS) {
       console.error('GOOGLE_CREDENTIALS missing');
       return res.status(500).json({ error: 'GOOGLE_CREDENTIALS not configured' });
@@ -43,16 +37,14 @@ export default async function handler(req, res) {
       console.error('AUTH0_BASE_URL missing');
       return res.status(500).json({ error: 'AUTH0_BASE_URL not configured' });
     }
-
-    console.log('4. Environment variables OK');
+    console.log('Environment variables OK');
 
     // Парсим credentials
-    console.log('5. Parsing GOOGLE_CREDENTIALS...');
+    console.log('4. Parsing credentials...');
     let credentials;
     try {
       credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-      console.log('Credentials parsed, type:', credentials.type);
-      console.log('Project ID:', credentials.project_id);
+      console.log('Credentials parsed, project:', credentials.project_id);
     } catch (parseError) {
       console.error('Failed to parse GOOGLE_CREDENTIALS:', parseError.message);
       return res.status(500).json({ 
@@ -61,7 +53,7 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log('6. Creating Google Auth...');
+    console.log('5. Creating Google Auth...');
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: [
@@ -70,57 +62,65 @@ export default async function handler(req, res) {
       ]
     });
 
-    console.log('7. Creating Drive client...');
+    console.log('6. Creating Drive client...');
     const drive = google.drive({ version: 'v3', auth });
     
-    console.log('8. Testing Drive API access...');
+    console.log('7. Testing file access...');
     try {
       const fileInfo = await drive.files.get({
         fileId: process.env.GOOGLE_SHEET_ID,
-        fields: 'id,name,mimeType,capabilities'
+        fields: 'id,name,mimeType'
       });
-      console.log('File access OK:', {
-        id: fileInfo.data.id,
-        name: fileInfo.data.name,
-        mimeType: fileInfo.data.mimeType
-      });
+      console.log('File accessible:', fileInfo.data.name);
     } catch (fileError) {
-      console.error('File access failed:', {
-        message: fileError.message,
-        code: fileError.code,
-        status: fileError.status
-      });
+      console.error('File access failed:', fileError.message);
       return res.status(500).json({ 
         error: 'Cannot access Google Sheet',
-        details: fileError.message,
-        code: fileError.code
+        details: fileError.message
       });
     }
 
-    console.log('9. Everything OK - would setup webhook here');
+    console.log('8. Setting up webhook...');
+    const webhookUrl = `${process.env.AUTH0_BASE_URL}/api/webhook/drive-changes`;
+    console.log('Webhook URL:', webhookUrl);
     
-    // Временно возвращаем успех без настройки webhook
+    const watchResponse = await drive.files.watch({
+      fileId: process.env.GOOGLE_SHEET_ID,
+      requestBody: {
+        id: `sheet-watch-${Date.now()}`,
+        type: 'web_hook',
+        address: webhookUrl,
+        payload: true,
+        token: 'sheet-change-token'
+      }
+    });
+
+    console.log('Push notification setup successful!');
+    console.log('Channel info:', {
+      id: watchResponse.data.id,
+      resourceId: watchResponse.data.resourceId,
+      expiration: watchResponse.data.expiration
+    });
+
     return res.status(200).json({
       success: true,
-      debug: 'All checks passed',
-      fileId: process.env.GOOGLE_SHEET_ID,
-      message: 'Debug mode - webhook not actually set up'
+      channel: watchResponse.data,
+      webhookUrl,
+      fileId: process.env.GOOGLE_SHEET_ID
     });
 
   } catch (error) {
     console.error('=== SETUP PUSH ERROR ===');
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    console.error('Error code:', error.code);
-    console.error('Error response:', error.response?.data);
+    console.error('Error:', error.message);
+    if (error.response?.data) {
+      console.error('Google API Error:', error.response.data);
+    }
     
     res.status(500).json({ 
       error: error.message,
-      stack: error.stack,
-      code: error.code,
       details: error.response?.data
     });
   } finally {
-    console.log('=== SETUP PUSH DEBUG END ===');
+    console.log('=== SETUP PUSH END ===');
   }
 } 

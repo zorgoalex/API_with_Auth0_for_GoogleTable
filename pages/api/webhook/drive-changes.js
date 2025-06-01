@@ -50,19 +50,29 @@ export default async function handler(req, res) {
     }
   } else if (req.method === 'GET') {
     // SSE endpoint для фронтенда
+    console.log('SSE connection request:', {
+      query: req.query,
+      userAgent: req.headers['user-agent']
+    });
+    
     try {
       // Проверяем авторизацию через query параметр
       const token = req.query.token;
       if (!token) {
+        console.error('SSE: Token required');
         return res.status(401).json({ error: 'Token required' });
       }
       
+      // Упрощенная проверка токена - только декодирование
       try {
-        // Декодируем токен (упрощенная проверка)
-        jwt.decode(token);
-      } catch (error) {
+        const decoded = jwt.decode(token);
+        console.log('SSE: Token decoded successfully for user:', decoded?.email || decoded?.sub);
+      } catch (tokenError) {
+        console.error('SSE: Invalid token:', tokenError.message);
         return res.status(401).json({ error: 'Invalid token' });
       }
+      
+      console.log('SSE: Starting Server-Sent Events connection...');
       
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -81,6 +91,7 @@ export default async function handler(req, res) {
       };
       
       clients.add(client);
+      console.log(`SSE: Client ${clientId} connected. Total clients: ${clients.size}`);
       
       // Отправляем initial message
       res.write(`data: ${JSON.stringify({ 
@@ -107,7 +118,7 @@ export default async function handler(req, res) {
       req.on('close', () => {
         clearInterval(pingInterval);
         clients.delete(client);
-        console.log(`Client ${clientId} disconnected`);
+        console.log(`SSE: Client ${clientId} disconnected. Total clients: ${clients.size}`);
       });
       
     } catch (error) {

@@ -333,6 +333,7 @@ export default function DataTable() {
   // Подключение к SSE
   const connectToSSE = async () => {
     try {
+      console.log('SSE: Getting access token...');
       const token = await getAccessTokenSilently();
       
       // Закрываем предыдущее соединение
@@ -340,15 +341,14 @@ export default function DataTable() {
         eventSourceRef.current.close();
       }
       
-      // Создаем новое SSE соединение
-      const eventSource = new EventSource('/api/webhook/drive-changes', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      // Создаем новое SSE соединение с токеном в query параметре
+      const sseUrl = `/api/webhook/drive-changes?token=${encodeURIComponent(token)}`;
+      console.log('SSE: Connecting to:', sseUrl);
+      
+      const eventSource = new EventSource(sseUrl);
       
       eventSource.onopen = () => {
-        console.log('SSE connected');
+        console.log('SSE: Connection opened successfully');
         setConnectionStatus('connected');
         setError(null);
       };
@@ -356,48 +356,60 @@ export default function DataTable() {
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('SSE message:', data);
+          console.log('SSE: Message received:', data);
           
           switch (data.type) {
             case 'connected':
-              console.log('SSE connection established, client ID:', data.clientId);
+              console.log('SSE: Connection established, client ID:', data.clientId);
               break;
               
             case 'sheet-changed':
-              console.log('Sheet changed, refreshing data...');
+              console.log('SSE: Sheet changed notification, refreshing data...');
               setIsPolling(true);
               loadData(false).finally(() => setIsPolling(false));
               break;
               
             case 'ping':
-              // Keep alive ping
+              console.log('SSE: Ping received, connection alive');
               break;
               
             default:
-              console.log('Unknown SSE message type:', data.type);
+              console.log('SSE: Unknown message type:', data.type);
           }
         } catch (error) {
-          console.error('Error parsing SSE message:', error);
+          console.error('SSE: Error parsing message:', error);
         }
       };
       
       eventSource.onerror = (error) => {
-        console.error('SSE error:', error);
+        console.error('SSE: Connection error:', error);
+        console.log('SSE: ReadyState:', eventSource.readyState);
+        
         setConnectionStatus('error');
         
-        // Переключаемся на polling при ошибке SSE
-        setTimeout(() => {
-          connectToSSE();
-        }, 5000);
+        // Если соединение постоянно падает, переключаемся на polling
+        if (eventSource.readyState === EventSource.CLOSED) {
+          console.log('SSE: Connection closed, falling back to polling');
+          setPushEnabled(false);
+          startPolling();
+        } else {
+          // Пытаемся переподключиться через 5 секунд
+          setTimeout(() => {
+            console.log('SSE: Attempting to reconnect...');
+            connectToSSE();
+          }, 5000);
+        }
       };
       
       eventSourceRef.current = eventSource;
       
     } catch (error) {
-      console.error('Error connecting to SSE:', error);
+      console.error('SSE: Error setting up connection:', error);
       setConnectionStatus('error');
       
       // Fallback на polling
+      console.log('SSE: Falling back to polling due to setup error');
+      setPushEnabled(false);
       startPolling();
     }
   };
