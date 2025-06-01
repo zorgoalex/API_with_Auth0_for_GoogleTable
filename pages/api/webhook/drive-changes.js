@@ -11,22 +11,36 @@ export default async function handler(req, res) {
       const channelId = req.headers['x-goog-channel-id'];
       const resourceId = req.headers['x-goog-resource-id'];
       const resourceState = req.headers['x-goog-resource-state'];
+      const channelToken = req.headers['x-goog-channel-token'];
       
       console.log('Drive webhook received:', {
         channelId,
         resourceId,
         resourceState,
+        channelToken,
+        headers: req.headers,
         body: req.body
       });
       
+      // Проверяем токен безопасности
+      if (channelToken !== 'sheet-change-token') {
+        console.warn('Invalid channel token received:', channelToken);
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+      
       // Проверяем что это изменение нашего файла
       if (resourceState === 'update' && resourceId) {
+        console.log('Valid sheet change detected, broadcasting to clients...');
+        
         // Уведомляем всех подключенных клиентов
         broadcastUpdate({
           type: 'sheet-changed',
           timestamp: new Date().toISOString(),
-          resourceId
+          resourceId,
+          channelId
         });
+      } else {
+        console.log('Ignoring webhook - not an update or no resourceId');
       }
       
       res.status(200).json({ received: true });
