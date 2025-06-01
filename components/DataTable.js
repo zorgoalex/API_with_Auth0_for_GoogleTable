@@ -6,7 +6,8 @@ export default function DataTable() {
   const hotTableRef = useRef(null);
   const writeTimeoutRef = useRef(null);
   const pendingChanges = useRef([]);
-  const eventSourceRef = useRef(null);
+  const eventSourceRef = useRef(null); // Только для SSE EventSource
+  const pollingIntervalRef = useRef(null); // Только для polling interval
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -41,7 +42,7 @@ export default function DataTable() {
         // Обработка rate limiting
         if (response.status === 429) {
           console.warn('Rate limit hit, pausing polling for 5 minutes');
-          clearInterval(eventSourceRef.current);
+          stopPolling();
           setTimeout(() => {
             startPolling();
           }, 300000);
@@ -74,12 +75,12 @@ export default function DataTable() {
   // Запуск polling
   const startPolling = () => {
     // Останавливаем предыдущий интервал если есть
-    if (eventSourceRef.current) {
-      clearInterval(eventSourceRef.current);
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
     }
     
     // Запускаем новый интервал
-    eventSourceRef.current = setInterval(() => {
+    pollingIntervalRef.current = setInterval(() => {
       loadData(false); // Без показа loader'а для фонового обновления
     }, FALLBACK_POLL_INTERVAL);
     
@@ -88,9 +89,9 @@ export default function DataTable() {
 
   // Остановка polling
   const stopPolling = () => {
-    if (eventSourceRef.current) {
-      clearInterval(eventSourceRef.current);
-      eventSourceRef.current = null;
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
       console.log('Polling stopped');
     }
   };
