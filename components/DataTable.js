@@ -1,11 +1,16 @@
-import { useRef, useEffect, useState } from 'react';
-import { HotTable } from '@handsontable/react';
-import { useAuth0 } from '@auth0/auth0-react';
-
 // Импорт стилей Handsontable
 import 'handsontable/dist/handsontable.full.min.css';
+import Handsontable from 'handsontable';
+import { HotTable } from '@handsontable/react';
+import { registerAllModules } from 'handsontable/registry';
+import { useEffect, useRef, useState } from 'react';
+import { useAuth0 } from '@auth0/auth0-react';
+import dynamic from 'next/dynamic';
 
-export default function DataTable() {
+// Регистрация всех модулей Handsontable
+registerAllModules();
+
+export default function DataTable({ onDataUpdate, sharedData, sharedLoading, sharedError }) {
   const hotTableRef = useRef(null);
   const writeTimeoutRef = useRef(null);
   const pendingChanges = useRef([]);
@@ -27,12 +32,27 @@ export default function DataTable() {
   const WRITE_DEBOUNCE = 500; // 0.5 сек дебаунс для записей
   const FALLBACK_POLL_INTERVAL = 5000; // Fallback polling каждые 5 сек
 
+  // Экспортируем функцию обновления данных глобально для доступа из других компонентов
+  useEffect(() => {
+    window.refreshDataTable = () => loadData(false);
+    return () => {
+      delete window.refreshDataTable;
+    };
+  }, []);
+
+  // Обновляем родительский компонент при изменении данных
+  useEffect(() => {
+    if (onDataUpdate) {
+      onDataUpdate(data, loading, error);
+    }
+  }, [data, loading, error, onDataUpdate]);
+
   // Загрузка данных
   const loadData = async (showLoader = false) => {
     try {
       if (showLoader) setLoading(true);
       if (!showLoader) setIsPolling(true);
-      
+
       const token = await getAccessTokenSilently();
       
       const response = await fetch('/api/sheet', {
@@ -40,31 +60,32 @@ export default function DataTable() {
           'Authorization': `Bearer ${token}`
         }
       });
-      
-      if (!response.ok) {
+
+      if (response.status === 429) {
         // Обработка rate limiting
-        if (response.status === 429) {
-          console.warn('Rate limit hit, pausing polling for 5 minutes');
-          stopPolling();
-          setTimeout(() => {
-            startPolling();
-          }, 300000);
-          throw new Error('Rate limit exceeded');
-        }
+        console.warn('Rate limit hit, pausing polling for 5 minutes');
+        stopPolling();
+        setTimeout(() => {
+          startPolling();
+        }, 5 * 60 * 1000); // 5 минут
+        throw new Error('Rate limit exceeded');
+      }
+
+      if (!response.ok) {
         throw new Error('Failed to fetch data');
       }
-      
+
       const rows = await response.json();
       
       // Проверяем изменения данных
       const newDataHash = JSON.stringify(rows);
-      if (lastModified !== newDataHash) {
+      if (newDataHash !== lastModified) {
         setData(rows);
         setLastModified(newDataHash);
         setLastUpdateTime(new Date());
         console.log('Data updated from Google Sheets');
       }
-      
+
       setError(null); // Сбрасываем ошибку при успешном запросе
     } catch (err) {
       console.error('Error loading data:', err);
@@ -81,12 +102,12 @@ export default function DataTable() {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
     }
-    
+
     // Запускаем новый интервал
     pollingIntervalRef.current = setInterval(() => {
       loadData(false); // Без показа loader'а для фонового обновления
     }, FALLBACK_POLL_INTERVAL);
-    
+
     console.log(`Polling started with ${FALLBACK_POLL_INTERVAL / 1000}s interval (${60 / (FALLBACK_POLL_INTERVAL / 1000)} requests/min)`);
   };
 
@@ -104,24 +125,25 @@ export default function DataTable() {
     loadData(true).then(async () => {
       // Всегда запускаем polling каждые 5 сек
       startPolling();
-      
+
       // Дополнительно пытаемся настроить push уведомления для мгновенных обновлений
       const pushSetup = await setupPushNotifications();
-      
       if (pushSetup) {
         // Если push уведомления настроены, подключаемся к SSE для мгновенных обновлений
         await connectToSSE();
       }
     });
-    
+
     // Cleanup при размонтировании
     return () => {
-      stopSSE();
       stopPolling();
+      stopSSE();
+      
       // Очищаем таймер записей
       if (writeTimeoutRef.current) {
         clearTimeout(writeTimeoutRef.current);
       }
+      
       // Принудительно сохраняем pending изменения
       if (pendingChanges.current.length > 0) {
         flushPendingChanges();
@@ -134,8 +156,8 @@ export default function DataTable() {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         // При потере фокуса - останавливаем соединения
-        stopSSE();
         stopPolling();
+        stopSSE();
       } else {
         // При возврате фокуса - обновляем данные и возобновляем соединения
         loadData(false);
@@ -143,6 +165,7 @@ export default function DataTable() {
         // Всегда перезапускаем polling
         startPolling();
         
+        // Пытаемся восстановить SSE если push включен
         if (pushEnabled) {
           connectToSSE();
         }
@@ -150,7 +173,6 @@ export default function DataTable() {
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -172,40 +194,48 @@ export default function DataTable() {
   // Дебаунсинг записей (batch операции)
   const flushPendingChanges = async () => {
     if (pendingChanges.current.length === 0) return;
-    
+
     const changes = [...pendingChanges.current];
     pendingChanges.current = [];
-    
+
     try {
       // Группируем изменения по строкам
       const groupedChanges = changes.reduce((acc, change) => {
-        const { rowIndex, data: changeData } = change;
-        if (!acc[rowIndex]) acc[rowIndex] = { rowIndex, data: {} };
+        const rowIndex = change.rowIndex;
+        const columnName = data.length > 0 ? Object.keys(data[0])[change.column] : null;
+        
+        if (!columnName || columnName === '_id') return acc;
+        
+        if (!acc[rowIndex]) {
+          acc[rowIndex] = { rowIndex, data: {} };
+        }
+        
+        const changeData = { [columnName]: change.value };
         Object.assign(acc[rowIndex].data, changeData);
+        
         return acc;
       }, {});
-      
+
       // Batch update всех изменений
       for (const { rowIndex, data: changeData } of Object.values(groupedChanges)) {
-        const rowData = data[rowIndex];
-        if (rowData && rowData._id) {
-          const updateData = { ...rowData, ...changeData, rowId: rowData._id };
-          
-          const response = await makeAPIRequest('/api/sheet', {
-            method: 'PUT',
-            body: JSON.stringify(updateData)
-          });
-          
-          if (!response.ok) {
-            throw new Error('Failed to update batch');
-          }
-          
-          // Обновляем локальные данные
-          const newData = [...data];
-          newData[rowIndex] = { ...newData[rowIndex], ...changeData };
-          setData(newData);
+        const rowId = data[rowIndex]._id;
+        
+        const response = await makeAPIRequest(`/api/sheet?rowId=${rowId}`, {
+          method: 'PUT',
+          body: JSON.stringify(updateData)
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update batch');
         }
       }
+
+      // Обновляем локальные данные
+      const newData = [...data];
+      Object.values(groupedChanges).forEach(({ rowIndex, data: changeData }) => {
+        newData[rowIndex] = { ...newData[rowIndex], ...changeData };
+      });
+      setData(newData);
       
       console.log(`Batch updated ${Object.keys(groupedChanges).length} rows`);
     } catch (err) {
@@ -217,31 +247,29 @@ export default function DataTable() {
 
   // Обработчик изменения данных с дебаунсингом
   const handleAfterChange = async (changes, source) => {
-    if (source === 'loadData' || source === 'UndoRedo.undo' || source === 'UndoRedo.redo') {
-      return;
+    if (!changes || source === 'loadData') return;
+
+    changes.forEach(([row, column, oldValue, newValue]) => {
+      if (oldValue !== newValue) {
+        // Добавляем изменение в очередь
+        pendingChanges.current.push({
+          rowIndex: row,
+          column,
+          value: newValue,
+          timestamp: Date.now()
+        });
+      }
+    });
+
+    // Сбрасываем предыдущий таймер
+    if (writeTimeoutRef.current) {
+      clearTimeout(writeTimeoutRef.current);
     }
 
-    if (changes) {
-      for (const [row, prop, oldValue, newValue] of changes) {
-        if (oldValue !== newValue) {
-          // Добавляем изменение в очередь
-          pendingChanges.current.push({
-            rowIndex: row,
-            data: { [prop]: newValue }
-          });
-          
-          // Сбрасываем предыдущий таймер
-          if (writeTimeoutRef.current) {
-            clearTimeout(writeTimeoutRef.current);
-          }
-          
-          // Устанавливаем новый таймер
-          writeTimeoutRef.current = setTimeout(() => {
-            flushPendingChanges();
-          }, WRITE_DEBOUNCE);
-        }
-      }
-    }
+    // Устанавливаем новый таймер
+    writeTimeoutRef.current = setTimeout(() => {
+      flushPendingChanges();
+    }, WRITE_DEBOUNCE);
   };
 
   // Обработчик создания новой строки
@@ -272,11 +300,14 @@ export default function DataTable() {
       const newData = [...data];
       newData.splice(index, 0, newRow);
       setData(newData);
+      
     } catch (err) {
       console.error('Error creating row:', err);
       // Удаляем созданную строку при ошибке
-      const hot = hotTableRef.current.hotInstance;
-      hot.alter('remove_row', index, amount);
+      const hot = hotTableRef.current?.hotInstance;
+      if (hot) {
+        hot.alter('remove_row', index, amount);
+      }
     }
   };
 
@@ -286,21 +317,20 @@ export default function DataTable() {
       const rowsToDelete = data.slice(index, index + amount);
       
       for (const row of rowsToDelete) {
-        if (row._id) {
-          const response = await makeAPIRequest(`/api/sheet?rowId=${row._id}`, {
-            method: 'DELETE'
-          });
-          
-          if (!response.ok) {
-            throw new Error('Failed to delete row');
-          }
+        const response = await makeAPIRequest(`/api/sheet?rowId=${row._id}`, {
+          method: 'DELETE'
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to delete row');
         }
       }
-      
+
       // Обновляем локальные данные
       const newData = [...data];
       newData.splice(index, amount);
       setData(newData);
+      
     } catch (err) {
       console.error('Error deleting row:', err);
       // Перезагружаем данные при ошибке
@@ -318,7 +348,7 @@ export default function DataTable() {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('Push notifications enabled:', data);
@@ -339,59 +369,52 @@ export default function DataTable() {
     try {
       console.log('SSE: Getting access token...');
       const token = await getAccessTokenSilently();
-      
+
       // Закрываем предыдущее соединение
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
-      
+
       // Очищаем pending reconnect
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
       }
-      
+
       // Создаем новое SSE соединение с токеном в query параметре
       const sseUrl = `/api/webhook/drive-changes?token=${encodeURIComponent(token)}`;
       console.log('SSE: Connecting to:', sseUrl);
       
       const eventSource = new EventSource(sseUrl);
-      
+      eventSourceRef.current = eventSource;
+
       eventSource.onopen = () => {
         console.log('SSE: Connection opened successfully');
         setConnectionStatus('connected');
         setError(null);
         reconnectAttemptsRef.current = 0; // Reset on successful connection
       };
-      
+
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           console.log('SSE: Message received:', data);
           
-          switch (data.type) {
-            case 'connected':
-              console.log('SSE: Connection established, client ID:', data.clientId);
-              break;
-              
-            case 'sheet-changed':
-              console.log('SSE: Sheet changed notification, refreshing data...');
-              setIsPolling(true);
-              loadData(false).finally(() => setIsPolling(false));
-              break;
-              
-            case 'ping':
-              console.log('SSE: Ping received, connection alive');
-              break;
-              
-            default:
-              console.log('SSE: Unknown message type:', data.type);
+          if (data.type === 'connected') {
+            console.log('SSE: Connection established, client ID:', data.clientId);
+          } else if (data.type === 'sheet-changed') {
+            console.log('SSE: Sheet changed notification, refreshing data...');
+            setIsPolling(true);
+            loadData(false).finally(() => setIsPolling(false));
+          } else if (data.type === 'ping') {
+            console.log('SSE: Ping received, connection alive');
+          } else {
+            console.log('SSE: Unknown message type:', data.type);
           }
         } catch (error) {
           console.error('SSE: Error parsing message:', error);
         }
       };
-      
+
       eventSource.onerror = (error) => {
         console.error('SSE: Connection error:', error);
         console.log('SSE: ReadyState:', eventSource.readyState);
@@ -399,12 +422,12 @@ export default function DataTable() {
         setConnectionStatus('error');
         
         // Если соединение закрыто или слишком много попыток подключения
-        if (eventSource.readyState === EventSource.CLOSED || reconnectAttemptsRef.current >= 5) {
+        if (eventSource.readyState === EventSource.CLOSED || reconnectAttemptsRef.current > 10) {
           console.log('SSE: Connection permanently closed or too many attempts, disabling push notifications');
           setPushEnabled(false);
           return;
         }
-        
+
         // Exponential backoff для reconnect
         reconnectAttemptsRef.current++;
         const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000); // Max 30s
@@ -417,21 +440,19 @@ export default function DataTable() {
           }
         }, backoffDelay);
       };
-      
-      eventSourceRef.current = eventSource;
-      
+
     } catch (error) {
       console.error('SSE: Error setting up connection:', error);
       setConnectionStatus('error');
       
       // Exponential backoff for setup errors too
-      reconnectAttemptsRef.current++;
-      if (reconnectAttemptsRef.current >= 5) {
+      if (reconnectAttemptsRef.current > 5) {
         console.log('SSE: Too many setup failures, disabling push notifications');
         setPushEnabled(false);
         return;
       }
       
+      reconnectAttemptsRef.current++;
       const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
       console.log(`SSE: Retrying setup in ${backoffDelay}ms`);
       
@@ -451,26 +472,11 @@ export default function DataTable() {
       setConnectionStatus('disconnected');
       console.log('SSE disconnected');
     }
-    
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    
-    reconnectAttemptsRef.current = 0;
   };
-
-  if (loading) {
-    return <div className="loading">Загрузка данных...</div>;
-  }
-
-  if (error) {
-    return <div className="error">Ошибка: {error}</div>;
-  }
 
   // Дополнительная проверка данных
   if (!data || !Array.isArray(data)) {
-    return <div className="loading">Подготовка данных...</div>;
+    return <div>Нет данных для отображения</div>;
   }
 
   const columns = data.length > 0 ? Object.keys(data[0]).filter(key => key !== '_id') : [];
@@ -478,76 +484,87 @@ export default function DataTable() {
   // Если нет колонок, показываем сообщение
   if (columns.length === 0) {
     return (
-      <div className="table-container">
-        <div className="status-bar">
-          <div className="status-indicator">
-            <span className="status-dot error"></span>
-          </div>
-          <button 
-            onClick={() => loadData(true)}
-            disabled={isPolling}
-            className="refresh-button"
-            title="Загрузить данные"
-          >
-            🔄 Загрузить
-          </button>
-        </div>
+      <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+        <p>Таблица пуста</p>
+        <button 
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          onClick={() => loadData(true)}
+        >
+          Обновить
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="table-container">
+    <div className="space-y-4">
       {/* Статус индикатор */}
-      <div className="status-bar">
-        <div className="status-indicator">
-          <span className={`status-dot ${
-            isPolling ? 'polling' : 
-            (connectionStatus === 'connected' && pushEnabled) || !error ? 'success' : 'error'
-          }`}></span>
-        </div>
-        
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <button 
+      <div className="flex items-center justify-between bg-white p-4 rounded shadow">
+        <div className="flex items-center space-x-4">
+          <button
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center"
             onClick={() => loadData(false)}
             disabled={isPolling}
-            className="refresh-button"
-            title="Обновить данные"
           >
-            🔄 Обновить
+            <span className="material-icons mr-2">refresh</span>
+            {isPolling ? 'Обновление...' : 'Обновить'}
           </button>
-          <div className="last-update">
+          
+          <div className="text-sm text-gray-600">
             {lastUpdateTime ? 
               `Последнее обновление: ${lastUpdateTime.toLocaleTimeString()}` : 
-              'Ожидание данных...'
+              'Не обновлялось'
             }
           </div>
+          
+          {pushEnabled && (
+            <div className="flex items-center">
+              <div className={`w-2 h-2 rounded-full mr-2 ${
+                connectionStatus === 'connected' ? 'bg-green-500' : 
+                connectionStatus === 'error' ? 'bg-red-500' : 
+                'bg-gray-500'
+              }`} />
+              <span className="text-sm text-gray-600">
+                Push: {connectionStatus === 'connected' ? 'Подключен' : 
+                       connectionStatus === 'error' ? 'Ошибка' : 
+                       'Отключен'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
-      
-      <div className="table-wrapper">
-        {data.length > 0 ? (
+
+      {/* Таблица */}
+      <div className="bg-white rounded shadow overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-gray-500">Загрузка данных...</div>
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-red-500">Ошибка: {error}</div>
+          </div>
+        ) : (
           <HotTable
             ref={hotTableRef}
             data={data}
             columns={columns.map(col => ({ data: col, title: col }))}
-            colHeaders={columns}
-            rowHeaders={true}
-            width="100%"
-            height="500"
+            stretchH="all"
+            autoWrapRow={true}
+            autoWrapCol={true}
+            height="auto"
             licenseKey="non-commercial-and-evaluation"
-            contextMenu={true}
+            colHeaders={true}
+            rowHeaders={true}
             manualRowResize={true}
             manualColumnResize={true}
+            contextMenu={true}
+            filters={true}
+            dropdownMenu={true}
             afterChange={handleAfterChange}
             afterCreateRow={handleAfterCreateRow}
             afterRemoveRow={handleAfterRemoveRow}
-            stretchH="all"
           />
-        ) : (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-            Таблица пуста. Данные загружаются...
-          </div>
         )}
       </div>
     </div>

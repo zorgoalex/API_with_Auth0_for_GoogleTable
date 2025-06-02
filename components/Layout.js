@@ -4,7 +4,14 @@ import dynamic from 'next/dynamic';
 
 // Динамический импорт DataTable
 const DataTable = dynamic(() => import('./DataTable'), {
-  ssr: false
+  ssr: false,
+  loading: () => <div>Загрузка таблицы...</div>
+});
+
+// Динамический импорт KanbanView
+const KanbanView = dynamic(() => import('./KanbanView'), {
+  ssr: false,
+  loading: () => <div>Загрузка канбан-доски...</div>
 });
 
 export default function Layout({ isAuthenticated, user }) {
@@ -12,6 +19,9 @@ export default function Layout({ isAuthenticated, user }) {
   const [currentView, setCurrentView] = useState('table');
   const [sidebarOpen, setSidebarOpen] = useState(false); // для мобильных
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // для десктопа
+  const [sharedData, setSharedData] = useState(null); // Общие данные для видов
+  const [sharedLoading, setSharedLoading] = useState(false);
+  const [sharedError, setSharedError] = useState(null);
 
   // Обработка изменения размера окна
   useEffect(() => {
@@ -35,8 +45,8 @@ export default function Layout({ isAuthenticated, user }) {
 
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, []);
-  
+  }, [sidebarOpen]);
+
   const switchView = (viewType) => {
     setCurrentView(viewType);
     if (window.innerWidth <= 768) {
@@ -54,126 +64,166 @@ export default function Layout({ isAuthenticated, user }) {
     }
   };
 
-  const titles = {
-    'table': 'Таблица',
-    'analytics': 'Канбан',
-    'settings': 'Проекты'
+  // Callback для обновления данных из дочерних компонентов
+  const handleDataUpdate = (data, loading, error) => {
+    setSharedData(data);
+    setSharedLoading(loading);
+    setSharedError(error);
   };
 
   return (
-    <div className="app-container">
+    <div className="flex h-screen bg-gray-100">
       {/* Сайдбар */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar__header">
-          <div className="logo">
-            <span className="material-icons">table_view</span>
-            <span className="logo-text">Google Table Hub</span>
-          </div>
+      <aside className={`sidebar bg-gray-800 text-white transition-all duration-300 z-20 ${
+        sidebarOpen ? 'fixed inset-y-0 left-0 w-64' : ''
+      } ${
+        sidebarCollapsed ? 'w-16' : 'w-64'
+      } ${
+        !sidebarOpen && window.innerWidth <= 768 ? 'hidden' : ''
+      } md:relative md:block`}>
+        <div className="p-4">
+          <h2 className={`text-xl font-semibold mb-6 ${sidebarCollapsed ? 'hidden' : ''}`}>
+            Меню
+          </h2>
+          <nav className="space-y-2">
+            <button
+              className={`w-full text-left p-3 rounded hover:bg-gray-700 flex items-center ${
+                currentView === 'table' ? 'bg-gray-700' : ''
+              }`}
+              onClick={() => switchView('table')}
+            >
+              <span className="material-icons mr-3">table_chart</span>
+              <span className={sidebarCollapsed ? 'hidden' : ''}>Таблица</span>
+            </button>
+            
+            <button
+              className={`w-full text-left p-3 rounded hover:bg-gray-700 flex items-center ${
+                currentView === 'kanban' ? 'bg-gray-700' : ''
+              }`}
+              onClick={() => switchView('kanban')}
+            >
+              <span className="material-icons mr-3">view_kanban</span>
+              <span className={sidebarCollapsed ? 'hidden' : ''}>Канбан</span>
+            </button>
+            
+            <button
+              className={`w-full text-left p-3 rounded hover:bg-gray-700 flex items-center ${
+                currentView === 'projects' ? 'bg-gray-700' : ''
+              }`}
+              onClick={() => switchView('projects')}
+            >
+              <span className="material-icons mr-3">folder</span>
+              <span className={sidebarCollapsed ? 'hidden' : ''}>Проекты</span>
+            </button>
+            
+            <button
+              className={`w-full text-left p-3 rounded hover:bg-gray-700 flex items-center ${
+                currentView === 'analytics' ? 'bg-gray-700' : ''
+              }`}
+              onClick={() => switchView('analytics')}
+            >
+              <span className="material-icons mr-3">analytics</span>
+              <span className={sidebarCollapsed ? 'hidden' : ''}>Аналитика</span>
+            </button>
+            
+            <button
+              className={`w-full text-left p-3 rounded hover:bg-gray-700 flex items-center ${
+                currentView === 'settings' ? 'bg-gray-700' : ''
+              }`}
+              onClick={() => switchView('settings')}
+            >
+              <span className="material-icons mr-3">settings</span>
+              <span className={sidebarCollapsed ? 'hidden' : ''}>Настройки</span>
+            </button>
+          </nav>
         </div>
-        <nav className="sidebar__nav">
-          <button 
-            className={`nav-item ${currentView === 'table' ? 'active' : ''}`}
-            onClick={() => switchView('table')}
-          >
-            <span className="material-icons">table_rows</span>
-            <span className="nav-text">Таблица</span>
-          </button>
-          <button 
-            className={`nav-item ${currentView === 'analytics' ? 'active' : ''}`}
-            onClick={() => switchView('analytics')}
-          >
-            <span className="material-icons">analytics</span>
-            <span className="nav-text">Канбан</span>
-          </button>
-          <button 
-            className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
-            onClick={() => switchView('settings')}
-          >
-            <span className="material-icons">settings</span>
-            <span className="nav-text">Проекты</span>
-          </button>
-        </nav>
       </aside>
 
       {/* Основной контент */}
-      <main className="main-content">
+      <main className="flex-1 overflow-hidden">
         {/* Хедер */}
-        <header className="header">
-          <button className="hamburger" onClick={toggleSidebar}>
-            <span className="material-icons">menu</span>
-          </button>
-          <h1 className="header__title">
-            {titles[currentView] || 'Google Table Hub'}
-          </h1>
-          <div className="header__actions">
-            {isAuthenticated && user && (
-              <>
-                <div className="user-info">
-                  <span className="user-name">{user.name || user.email}</span>
-                  {user.picture && (
-                    <img 
-                      src={user.picture} 
-                      alt="User" 
-                      className="user-avatar"
-                    />
-                  )}
-                </div>
-                <button
-                  className="logout-button"
-                  onClick={() => logout({
-                    logoutParams: {
-                      returnTo: window.location.origin
-                    }
-                  })}
-                  title="Выйти из системы"
-                >
-                  <span className="material-icons">logout</span>
-                </button>
-              </>
-            )}
+        <header className="bg-white shadow-md p-4 flex justify-between items-center">
+          <div className="flex items-center">
+            <button
+              className="hamburger md:mr-4 p-2 rounded hover:bg-gray-200"
+              onClick={toggleSidebar}
+            >
+              <span className="material-icons">menu</span>
+            </button>
+            <h1 className="text-xl font-semibold">
+              {currentView === 'table' && 'Таблица данных'}
+              {currentView === 'kanban' && 'Канбан-доска'}
+              {currentView === 'projects' && 'Проекты'}
+              {currentView === 'analytics' && 'Аналитика'}
+              {currentView === 'settings' && 'Настройки'}
+            </h1>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            <span className="text-sm text-gray-600">{user?.email}</span>
+            <button
+              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+              onClick={() => logout({
+                returnTo: window.location.origin
+              })}
+            >
+              Выйти
+            </button>
           </div>
         </header>
 
         {/* Контент */}
-        <div className="content">
+        <div className="p-6 overflow-auto h-full">
           {/* Вид таблицы */}
-          <div className={`view ${currentView === 'table' ? 'active' : ''}`}>
-            {isAuthenticated ? (
-              <DataTable />
-            ) : (
-              <div className="auth-placeholder">
-                <div className="auth-message">
-                  <span className="material-icons">lock</span>
-                  <h3>Требуется авторизация</h3>
-                  <p>Для доступа к таблице необходимо войти в систему</p>
-                </div>
-              </div>
-            )}
-          </div>
-
+          {currentView === 'table' && (
+            <DataTable 
+              onDataUpdate={handleDataUpdate}
+              sharedData={sharedData}
+              sharedLoading={sharedLoading}
+              sharedError={sharedError}
+            />
+          )}
+          
+          {/* Вид канбан */}
+          {currentView === 'kanban' && (
+            <KanbanView 
+              data={sharedData}
+              loading={sharedLoading}
+              error={sharedError}
+              onDataUpdate={() => {
+                // Триггерим обновление данных через DataTable
+                if (window.refreshDataTable) {
+                  window.refreshDataTable();
+                }
+              }}
+            />
+          )}
+          
+          {/* Вид проектов */}
+          {currentView === 'projects' && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-2xl font-semibold mb-4">Проекты</h2>
+              <p className="text-gray-600">Раздел в разработке...</p>
+            </div>
+          )}
+          
           {/* Вид аналитики */}
-          <div className={`view ${currentView === 'analytics' ? 'active' : ''}`}>
-            <div className="analytics-placeholder">
-              <div className="placeholder-content">
-                <span className="material-icons">analytics</span>
-                <h3>Канбан</h3>
-                <p>Здесь будут отображаться дедлайны проектов из таблицы</p>
-              </div>
+          {currentView === 'analytics' && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-2xl font-semibold mb-4">Аналитика</h2>
+              <p className="text-gray-600">Раздел в разработке...</p>
             </div>
-          </div>
-
+          )}
+          
           {/* Вид настроек */}
-          <div className={`view ${currentView === 'settings' ? 'active' : ''}`}>
-            <div className="settings-placeholder">
-              <div className="placeholder-content">
-                <span className="material-icons">settings</span>
-                <h3>Проекты</h3>
-                <p>Здесь будут карточки проектов</p>
-              </div>
+          {currentView === 'settings' && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-2xl font-semibold mb-4">Настройки</h2>
+              <p className="text-gray-600">Раздел в разработке...</p>
             </div>
-          </div>
+          )}
         </div>
       </main>
     </div>
   );
-} 
+}

@@ -4,9 +4,10 @@ import { getAllRows, addRow, updateRow, deleteRow } from '../../lib/google-sheet
 export default async function handler(req, res) {
   // Проверяем авторизацию
   const user = await requireAuth(req, res);
-  if (!user) return;
+  if (!user) return; // requireAuth уже отправил ответ
 
-  const { method, body, query } = req;
+  const { method, query, body } = req;
+  const { rowId } = query;
 
   try {
     switch (method) {
@@ -21,27 +22,33 @@ export default async function handler(req, res) {
         break;
 
       case 'PUT':
-        const { rowId, ...updateData } = body;
-        const updatedRow = await updateRow(parseInt(rowId), updateData);
+        if (!rowId) {
+          return res.status(400).json({ error: 'rowId is required' });
+        }
+        
+        // Поддержка частичного обновления
+        const updatedRow = await updateRow(parseInt(rowId), body);
         res.status(200).json(updatedRow);
         break;
 
       case 'DELETE':
-        const { rowId: deleteRowId } = query;
-        await deleteRow(parseInt(deleteRowId));
+        if (!rowId) {
+          return res.status(400).json({ error: 'rowId is required' });
+        }
+        
+        await deleteRow(parseInt(rowId));
         res.status(200).json({ success: true });
         break;
 
       default:
         res.setHeader('Allow', ['GET', 'POST', 'PUT', 'DELETE']);
         res.status(405).end(`Method ${method} Not Allowed`);
-        break;
     }
   } catch (error) {
     console.error('API Error:', error);
     res.status(500).json({ 
-      error: 'Internal Server Error',
-      message: error.message 
+      error: 'Internal server error', 
+      details: error.message 
     });
   }
-} 
+}
