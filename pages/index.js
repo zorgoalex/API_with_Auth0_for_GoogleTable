@@ -1,67 +1,48 @@
 import { useAuth0 } from '@auth0/auth0-react';
-import dynamic from 'next/dynamic';
-
-// Динамический импорт для избежания проблем с SSR
-const DataTable = dynamic(() => import('../components/DataTable'), {
-  ssr: false
-});
+import Layout from '../components/Layout';
 
 export default function Home() {
   const { 
     isLoading, 
     isAuthenticated, 
     loginWithRedirect, 
-    logout, 
     user 
   } = useAuth0();
 
   if (isLoading) {
     return (
-      <div className="container">
-        <div className="loading">Загрузка...</div>
+      <div className="loading-screen">
+        <div className="loading-spinner">
+          <span className="material-icons">hourglass_empty</span>
+          <h3>Загрузка...</h3>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="container">
-      <header className="header">
-        <h1 className="title">
-          {isAuthenticated ? `Привет, ${user?.name || user?.email}!` : 'Google Таблица'}
-        </h1>
-        
-        <div>
-          {isAuthenticated ? (
+  if (!isAuthenticated) {
+    return (
+      <div className="auth-screen">
+        <div className="auth-container">
+          <div className="auth-header">
+            <span className="material-icons">table_view</span>
+            <h1>Google Table Hub</h1>
+          </div>
+          <div className="auth-content">
+            <h2>Добро пожаловать!</h2>
+            <p>Для доступа к Google таблице необходимо войти в систему</p>
             <button
-              className="auth-button logout-button"
-              onClick={() => logout({
-                logoutParams: {
-                  returnTo: window.location.origin
-                }
-              })}
-            >
-              Выйти
-            </button>
-          ) : (
-            <button
-              className="auth-button"
+              className="auth-button primary"
               onClick={() => loginWithRedirect()}
             >
+              <span className="material-icons">login</span>
               Войти
             </button>
-          )}
-        </div>
-      </header>
-
-      {isAuthenticated ? (
-        <DataTable />
-      ) : (
-        <div className="table-container">
-          <div className="loading">
-            Для доступа к таблице необходимо войти в систему
           </div>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
+
+  return <Layout isAuthenticated={isAuthenticated} user={user} />;
 } 
