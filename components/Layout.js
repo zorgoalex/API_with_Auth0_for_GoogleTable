@@ -10,13 +10,14 @@ const DataTable = dynamic(() => import('./DataTable'), {
 export default function Layout({ isAuthenticated, user }) {
   const { logout } = useAuth0();
   const [currentView, setCurrentView] = useState('table');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // для мобильных
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // для десктопа
 
   // Обработка изменения размера окна
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth > 768) {
-        setSidebarOpen(false);
+        setSidebarOpen(false); // закрываем мобильный сайдбар
       }
     };
 
@@ -24,7 +25,7 @@ export default function Layout({ isAuthenticated, user }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Закрытие сайдбара при клике вне его
+  // Закрытие сайдбара при клике вне его (только для мобильных)
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (window.innerWidth <= 768 && !e.target.closest('.sidebar') && !e.target.closest('.hamburger')) {
@@ -35,7 +36,7 @@ export default function Layout({ isAuthenticated, user }) {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
-
+  
   const switchView = (viewType) => {
     setCurrentView(viewType);
     if (window.innerWidth <= 768) {
@@ -44,19 +45,25 @@ export default function Layout({ isAuthenticated, user }) {
   };
 
   const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
+    if (window.innerWidth <= 768) {
+      // На мобильных - открываем/закрываем
+      setSidebarOpen(!sidebarOpen);
+    } else {
+      // На десктопе - сворачиваем/разворачиваем
+      setSidebarCollapsed(!sidebarCollapsed);
+    }
   };
 
   const titles = {
-    'table': 'Google Таблица',
-    'analytics': 'Аналитика',
-    'settings': 'Настройки'
+    'table': 'Таблица',
+    'analytics': 'Канбан',
+    'settings': 'Проекты'
   };
 
   return (
     <div className="app-container">
       {/* Сайдбар */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar__header">
           <div className="logo">
             <span className="material-icons">table_view</span>
@@ -76,14 +83,14 @@ export default function Layout({ isAuthenticated, user }) {
             onClick={() => switchView('analytics')}
           >
             <span className="material-icons">analytics</span>
-            <span className="nav-text">Аналитика</span>
+            <span className="nav-text">Канбан</span>
           </button>
           <button 
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => switchView('settings')}
           >
             <span className="material-icons">settings</span>
-            <span className="nav-text">Настройки</span>
+            <span className="nav-text">Проекты</span>
           </button>
         </nav>
       </aside>
@@ -149,8 +156,8 @@ export default function Layout({ isAuthenticated, user }) {
             <div className="analytics-placeholder">
               <div className="placeholder-content">
                 <span className="material-icons">analytics</span>
-                <h3>Аналитика</h3>
-                <p>Здесь будет отображаться аналитика данных из таблицы</p>
+                <h3>Канбан</h3>
+                <p>Здесь будут отображаться дедлайны проектов из таблицы</p>
               </div>
             </div>
           </div>
@@ -160,8 +167,8 @@ export default function Layout({ isAuthenticated, user }) {
             <div className="settings-placeholder">
               <div className="placeholder-content">
                 <span className="material-icons">settings</span>
-                <h3>Настройки</h3>
-                <p>Здесь будут настройки приложения</p>
+                <h3>Проекты</h3>
+                <p>Здесь будут карточки проектов</p>
               </div>
             </div>
           </div>

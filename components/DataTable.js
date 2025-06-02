@@ -2,6 +2,9 @@ import { useRef, useEffect, useState } from 'react';
 import { HotTable } from '@handsontable/react';
 import { useAuth0 } from '@auth0/auth0-react';
 
+// Импорт стилей Handsontable
+import 'handsontable/dist/handsontable.full.min.css';
+
 export default function DataTable() {
   const hotTableRef = useRef(null);
   const writeTimeoutRef = useRef(null);
@@ -465,7 +468,33 @@ export default function DataTable() {
     return <div className="error">Ошибка: {error}</div>;
   }
 
+  // Дополнительная проверка данных
+  if (!data || !Array.isArray(data)) {
+    return <div className="loading">Подготовка данных...</div>;
+  }
+
   const columns = data.length > 0 ? Object.keys(data[0]).filter(key => key !== '_id') : [];
+
+  // Если нет колонок, показываем сообщение
+  if (columns.length === 0) {
+    return (
+      <div className="table-container">
+        <div className="status-bar">
+          <div className="status-indicator">
+            <span className="status-dot error"></span>
+          </div>
+          <button 
+            onClick={() => loadData(true)}
+            disabled={isPolling}
+            className="refresh-button"
+            title="Загрузить данные"
+          >
+            🔄 Загрузить
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="table-container">
@@ -473,6 +502,7 @@ export default function DataTable() {
       <div className="status-bar">
         <div className="status-indicator">
           <span className={`status-dot ${
+            isPolling ? 'polling' : 
             (connectionStatus === 'connected' && pushEnabled) || !error ? 'success' : 'error'
           }`}></span>
         </div>
@@ -496,23 +526,29 @@ export default function DataTable() {
       </div>
       
       <div className="table-wrapper">
-        <HotTable
-          ref={hotTableRef}
-          data={data}
-          columns={columns.map(col => ({ data: col, title: col }))}
-          colHeaders={columns}
-          rowHeaders={true}
-          width="100%"
-          height="500"
-          licenseKey="non-commercial-and-evaluation"
-          contextMenu={true}
-          manualRowResize={true}
-          manualColumnResize={true}
-          afterChange={handleAfterChange}
-          afterCreateRow={handleAfterCreateRow}
-          afterRemoveRow={handleAfterRemoveRow}
-          stretchH="all"
-        />
+        {data.length > 0 ? (
+          <HotTable
+            ref={hotTableRef}
+            data={data}
+            columns={columns.map(col => ({ data: col, title: col }))}
+            colHeaders={columns}
+            rowHeaders={true}
+            width="100%"
+            height="500"
+            licenseKey="non-commercial-and-evaluation"
+            contextMenu={true}
+            manualRowResize={true}
+            manualColumnResize={true}
+            afterChange={handleAfterChange}
+            afterCreateRow={handleAfterCreateRow}
+            afterRemoveRow={handleAfterRemoveRow}
+            stretchH="all"
+          />
+        ) : (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+            Таблица пуста. Данные загружаются...
+          </div>
+        )}
       </div>
     </div>
   );
