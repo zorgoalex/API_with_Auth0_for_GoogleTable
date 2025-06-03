@@ -1,23 +1,25 @@
 import React, { useEffect, useState } from 'react';
+import { useAuth0 } from '@auth0/auth0-react';
 
-// Хелпер для форматирования даты в DD.MM.YYYY
-function formatDate(date) {
-  if (typeof date === 'string') return date;
-  const d = new Date(date);
+function formatDateUniversal(dateInput) {
+  if (!dateInput) return '';
+  if (typeof dateInput === 'string' && dateInput.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+    return dateInput;
+  }
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return String(dateInput);
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
   return `${day}.${month}.${year}`;
 }
 
-// Хелпер — сокращенное название дня недели (русский)
 const WEEKDAYS = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
 function getDayName(date) {
   const d = new Date(date);
   return WEEKDAYS[d.getDay()];
 }
 
-// Генерация дат: 3 дня назад — сегодня — 3 дня вперёд, без воскресений
 function generateDays(centerDate, range = 3) {
   let days = [];
   const today = new Date(centerDate);
@@ -25,16 +27,15 @@ function generateDays(centerDate, range = 3) {
   for (let offset = -range; offset <= range; offset++) {
     const d = new Date(today);
     d.setDate(today.getDate() + offset);
-    if (d.getDay() !== 0) days.push(new Date(d)); // без воскресений
+    if (d.getDay() !== 0) days.push(new Date(d));
   }
   return days;
 }
 
-// Группировка заказов по plannedDate ("DD.MM.YYYY")
 function groupOrdersByDate(orders) {
   const map = {};
   for (const order of orders) {
-    const key = formatDate(order.plannedDate);
+    const key = formatDateUniversal(order["Планируемая дата выдачи"]);
     if (!map[key]) map[key] = [];
     map[key].push(order);
   }
@@ -42,22 +43,24 @@ function groupOrdersByDate(orders) {
 }
 
 export default function KanbanBoard() {
+  const { getAccessTokenSilently } = useAuth0();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [days, setDays] = useState([]);
 
   useEffect(() => {
-    // Загружаем данные с API
     async function fetchOrders() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/api/sheet');
+        const token = await getAccessTokenSilently();
+        const res = await fetch('/api/sheet', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         if (!res.ok) throw new Error('Ошибка загрузки данных');
         const data = await res.json();
         setOrders(data);
-        // days: от 3 назад до 3 вперёд
         setDays(generateDays(new Date(), 3));
       } catch (e) {
         setError(e.message);
@@ -65,6 +68,7 @@ export default function KanbanBoard() {
       setLoading(false);
     }
     fetchOrders();
+    // eslint-disable-next-line
   }, []);
 
   const ordersMap = groupOrdersByDate(orders);
@@ -83,7 +87,7 @@ export default function KanbanBoard() {
           gap: 16
         }}>
           {days.map((day) => {
-            const key = formatDate(day);
+            const key = formatDateUniversal(day);
             const dayOrders = ordersMap[key] || [];
             return (
               <div
@@ -106,25 +110,31 @@ export default function KanbanBoard() {
                     <div style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>Нет заказов</div>
                   ) : dayOrders.map(order => (
                     <div
-                      key={order._id || order.orderNumber || Math.random()}
+                      key={order._id || order["Номер заказа"] || Math.random()}
                       style={{
                         border: '1px solid var(--color-card-border)',
                         borderRadius: 7,
-                        background: order.status?.toLowerCase() === 'выдан' ? 'var(--color-success)' : 'var(--color-background)',
+                        background: order["Статус"]?.toLowerCase() === 'выдан' ? 'var(--color-success)' : 'var(--color-background)',
                         color: 'var(--color-text)',
                         boxShadow: 'var(--shadow-xs)',
                         padding: 10,
                         fontSize: 14,
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 4
+                        gap: 2
                       }}
                     >
-                      <div style={{ fontWeight: 600 }}>Заказ №{order.orderNumber}</div>
-                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{order.customerName || order.name || '-'}</div>
-                      <div>Площадь: {order.area ? String(order.area).replace(',', '.') : '?'} м²</div>
+                      <div style={{ fontWeight: 600, fontSize: 18 }}>
+                        {order["Номер заказа"] || ''}
+                      </div>
+                      <div style={{ fontSize: 14 }}>
+                        {order["Площадь заказа"] ? String(order["Площадь заказа"]).replace(',', '.') + " м²" : ''}
+                      </div>
+                      <div style={{ fontSize: 14, color: 'var(--color-text-secondary)' }}>
+                        {order["Клиент"] || ''}
+                      </div>
                       <div style={{ fontSize: 13 }}>
-                        Статус: {order.status || '—'}
+                        {order["Статус"] || ''}
                       </div>
                     </div>
                   ))}
