@@ -42,6 +42,22 @@ function groupOrdersByDate(orders) {
   return map;
 }
 
+function getStatusColor(status) {
+  if (!status) return 'var(--color-background)';
+  const s = status.toLowerCase();
+  if (s === 'выдан') return 'var(--color-success)';
+  if (s === 'готов') return '#d6f5d6'; // светло-зеленый
+  return 'var(--color-background)';
+}
+
+const getTotalArea = (orders) =>
+  orders.reduce((sum, o) => sum + (parseFloat(String(o["Площадь заказа"]).replace(',', '.')) || 0), 0);
+
+function capitalizeFirst(str) {
+  if (!str) return '';
+  return str[0].toUpperCase() + str.slice(1).toLowerCase();
+}
+
 export default function KanbanBoard() {
   const { getAccessTokenSilently } = useAuth0();
   const [orders, setOrders] = useState([]);
@@ -101,9 +117,17 @@ export default function KanbanBoard() {
                   border: '1px solid var(--color-border)'
                 }}
               >
-                <div style={{ marginBottom: 8, fontWeight: 500 }}>
-                  <span>{getDayName(day)}</span>
-                  <span style={{ marginLeft: 6, color: 'var(--color-text-secondary)' }}>{key}</span>
+                <div style={{ marginBottom: 8, fontWeight: 500, fontSize: 16 }}>
+                  <span style={{ fontWeight: 700, color: '#000' }}>{capitalizeFirst(getDayName(day))}</span>
+                  <span style={{ marginLeft: 4, color: '#000' }}>({key})</span>
+                  {dayOrders.length > 0 && (
+                    <>
+                      <span style={{ margin: '0 6px', color: '#000' }}>—</span>
+                      <span style={{ color: '#b36b00', fontWeight: 700, fontSize: 16 }}>
+                        {getTotalArea(dayOrders).toFixed(2)} кв.м.
+                      </span>
+                    </>
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {dayOrders.length === 0 ? (
@@ -114,27 +138,28 @@ export default function KanbanBoard() {
                       style={{
                         border: '1px solid var(--color-card-border)',
                         borderRadius: 7,
-                        background: order["Статус"]?.toLowerCase() === 'выдан' ? 'var(--color-success)' : 'var(--color-background)',
+                        background: getStatusColor(order["Статус"]),
                         color: 'var(--color-text)',
                         boxShadow: 'var(--shadow-xs)',
                         padding: 10,
                         fontSize: 14,
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 2
+                        gap: 4,
+                        position: 'relative'
                       }}
                     >
-                      <div style={{ fontWeight: 600, fontSize: 18 }}>
-                        {order["Номер заказа"] || ''}
+                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+                        <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 18 }}>
+                          {order["Номер заказа"] || ''}
+                        </span>
                       </div>
-                      <div style={{ fontSize: 14 }}>
-                        {order["Площадь заказа"] ? String(order["Площадь заказа"]).replace(',', '.') + " м²" : ''}
+                      <div style={{ fontSize: 11, marginBottom: 2 }}>
+                        {order["Площадь заказа"] ? `. ${String(order["Площадь заказа"]).replace(',', '.')} кв.м.` : ''}
                       </div>
-                      <div style={{ fontSize: 14, color: 'var(--color-text-secondary)' }}>
+                      <div style={{ fontSize: 12, color: '#888' }}>
                         {order["Клиент"] || ''}
-                      </div>
-                      <div style={{ fontSize: 13 }}>
-                        {order["Статус"] || ''}
+                        {order["Статус"] ? ` • ${order["Статус"]}` : ''}
                       </div>
                     </div>
                   ))}
