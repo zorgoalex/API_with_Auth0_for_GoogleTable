@@ -44,7 +44,7 @@ function groupOrdersByDate(orders) {
 
 function getStatusColor(status) {
   if (!status) return 'var(--color-background)';
-  const s = status.toLowerCase();
+  const s = String(status).toLowerCase();
   if (s === 'выдан') return '#eafbe7'; // очень светло-зеленый фон
   return 'var(--color-background)';
 }
@@ -134,7 +134,7 @@ export default function KanbanBoard() {
                     <div
                       key={order._id || order["Номер заказа"] || Math.random()}
                       style={{
-                        border: order["Статус"]?.toLowerCase() === 'готов'
+                        border: String(order["Статус"] ?? '').toLowerCase() === 'готов'
                           ? '2px solid #4caf50'
                           : '1px solid var(--color-card-border)',
                         borderRadius: 7,
@@ -149,10 +149,35 @@ export default function KanbanBoard() {
                         position: 'relative'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
                         <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 18 }}>
                           {order["Номер заказа"] || ''}
                         </span>
+                        {order["Материал"] && String(order["Материал"]).split(',').map((mat, idx, arr) => {
+                          const m = mat.trim().toLowerCase();
+                          let bg = '#f5f5f5';
+                          if (m.includes('18')) bg = '#fff3e0';
+                          else if (m.includes('10')) bg = '#e3f2fd';
+                          else if (m.includes('лдсп')) bg = '#f3e6ff';
+                          return (
+                            <span key={idx} style={{
+                              background: bg,
+                              color: '#b23c17',
+                              fontStyle: 'italic',
+                              fontWeight: 400,
+                              fontSize: 11,
+                              padding: '1px 7px',
+                              borderRadius: 6,
+                              marginRight: idx !== arr.length - 1 ? 4 : 0
+                            }}>{mat.trim()}</span>
+                          );
+                        })}
+                        {(() => {
+                          const ot = String(order["Отрисован"] ?? '').toLowerCase();
+                          return (ot.includes('отрис') || ot.includes('cad')) && (
+                            <span style={{ color: '#1976d2', fontWeight: 700, fontSize: 22, marginLeft: 4, lineHeight: 1 }}>О</span>
+                          );
+                        })()}
                       </div>
                       <div style={{ fontSize: 11, marginBottom: 2 }}>
                         {order["Фрезеровка"] ? `. ${order["Фрезеровка"]}` : ''}
