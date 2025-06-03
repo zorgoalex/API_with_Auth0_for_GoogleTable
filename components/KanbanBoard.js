@@ -65,11 +65,8 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
 
   const handleCheckboxChange = (order, isChecked) => {
     if (!onOrderStatusUpdate) return;
-    const newStatus = isChecked ? 'Выдан' : 'Готов'; // Если снимаем галочку, ставим "Готов"
-    // Если нужно другое поведение (например, возврат к предыдущему статусу), логику нужно усложнить
+    const newStatus = isChecked ? 'Выдан' : '-';
     const fieldsToUpdate = { "Статус": newStatus };
-    // Если нужно обновлять и дату фактической выдачи, ее нужно будет добавить сюда
-    // fieldsToUpdate["Дата фактической выдачи"] = isChecked ? formatDateUniversal(new Date()) : '';
     onOrderStatusUpdate(order._id, fieldsToUpdate);
   };
 
@@ -140,13 +137,13 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                           onChange={(e) => handleCheckboxChange(order, e.target.checked)}
                           onClick={(e) => e.stopPropagation()} // Чтобы клик по чекбоксу не влиял на другие события карточки
                           style={{
-                            width: 18,
-                            height: 18,
+                            width: 10,
+                            height: 10,
                             marginRight: 8,
                             cursor: 'pointer',
                             accentColor: '#1976d2' // Цвет галочки
                           }}
-                          title={isIssued ? "Отменить выдачу" : "Отметить как выданный"}
+                          title={isIssued ? "Снять отметку о выдаче (статус изменится на '-')" : "Отметить как выданный"}
                         />
                         <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 18 }}>
                           {order["Номер заказа"] || ''}
@@ -186,17 +183,6 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                         {order["Клиент"] || ''}
                         {order["Оплата"] ? ` • ${order["Оплата"]}` : ''}
                       </div>
-                      {/* Отображение статуса "Выдан" */}
-                      {isIssued && (
-                        <div style={{
-                          marginTop: 4,
-                          fontSize: 13,
-                          fontWeight: 500,
-                          color: 'var(--color-success, green)' // Можно настроить цвет
-                        }}>
-                          Выдан
-                        </div>
-                      )}
                     </div>
                   );
                 })}
