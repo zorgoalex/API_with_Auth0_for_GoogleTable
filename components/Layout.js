@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import dynamic from 'next/dynamic';
+import KanbanBoard from './KanbanBoard'; // <--- добавили импорт
 
 // Динамический импорт DataTable
 const DataTable = dynamic(() => import('./DataTable'), {
@@ -56,7 +57,7 @@ export default function Layout({ isAuthenticated, user }) {
 
   const titles = {
     'table': 'Таблица',
-    'analytics': 'Канбан',
+    'kanban': 'Канбан',
     'settings': 'Проекты'
   };
 
@@ -79,10 +80,10 @@ export default function Layout({ isAuthenticated, user }) {
             <span className="nav-text">Таблица</span>
           </button>
           <button 
-            className={`nav-item ${currentView === 'analytics' ? 'active' : ''}`}
-            onClick={() => switchView('analytics')}
+            className={`nav-item ${currentView === 'kanban' ? 'active' : ''}`}
+            onClick={() => switchView('kanban')}
           >
-            <span className="material-icons">analytics</span>
+            <span className="material-icons">view_kanban</span>
             <span className="nav-text">Канбан</span>
           </button>
           <button 
@@ -151,15 +152,19 @@ export default function Layout({ isAuthenticated, user }) {
             )}
           </div>
 
-          {/* Вид аналитики */}
-          <div className={`view ${currentView === 'analytics' ? 'active' : ''}`}>
-            <div className="analytics-placeholder">
-              <div className="placeholder-content">
-                <span className="material-icons">analytics</span>
-                <h3>Канбан</h3>
-                <p>Здесь будут отображаться дедлайны проектов из таблицы</p>
+          {/* Вид Канбан */}
+          <div className={`view ${currentView === 'kanban' ? 'active' : ''}`}>
+            {isAuthenticated ? (
+              <KanbanBoard />
+            ) : (
+              <div className="analytics-placeholder">
+                <div className="placeholder-content">
+                  <span className="material-icons">view_kanban</span>
+                  <h3>Канбан</h3>
+                  <p>Для доступа к канбан-доске необходимо войти в систему</p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Вид настроек */}
@@ -176,4 +181,4 @@ export default function Layout({ isAuthenticated, user }) {
       </main>
     </div>
   );
-} 
+}
