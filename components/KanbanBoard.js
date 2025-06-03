@@ -60,8 +60,18 @@ function capitalizeFirst(str) {
   return str[0].toUpperCase() + str.slice(1).toLowerCase();
 }
 
-export default function KanbanBoard({ orders = [], days = [] }) {
+export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdate }) {
   const ordersMap = groupOrdersByDate(orders);
+
+  const handleCheckboxChange = (order, isChecked) => {
+    if (!onOrderStatusUpdate) return;
+    const newStatus = isChecked ? 'Выдан' : 'Готов'; // Если снимаем галочку, ставим "Готов"
+    // Если нужно другое поведение (например, возврат к предыдущему статусу), логику нужно усложнить
+    const fieldsToUpdate = { "Статус": newStatus };
+    // Если нужно обновлять и дату фактической выдачи, ее нужно будет добавить сюда
+    // fieldsToUpdate["Дата фактической выдачи"] = isChecked ? formatDateUniversal(new Date()) : '';
+    onOrderStatusUpdate(order._id, fieldsToUpdate);
+  };
 
   return (
     <div style={{ width: '100%', overflowX: 'auto', padding: 16, background: '#fdfdfe' }}>
@@ -101,66 +111,95 @@ export default function KanbanBoard({ orders = [], days = [] }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {dayOrders.length === 0 ? (
                   <div style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>Нет заказов</div>
-                ) : dayOrders.map(order => (
-                  <div
-                    key={order._id || order["Номер заказа"] || Math.random()}
-                    style={{
-                      border: String(order["Статус"] ?? '').toLowerCase() === 'готов'
-                        ? '2px solid #4caf50'
-                        : '1px solid var(--color-card-border)',
-                      borderRadius: 7,
-                      background: getStatusColor(order["Статус"]),
-                      color: 'var(--color-text)',
-                      boxShadow: 'var(--shadow-xs)',
-                      padding: 10,
-                      fontSize: 14,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 4,
-                      position: 'relative'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
-                      <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 18 }}>
-                        {order["Номер заказа"] || ''}
-                      </span>
-                      {order["Материал"] && String(order["Материал"]).split(',').map((mat, idx, arr) => {
-                        const m = mat.trim().toLowerCase();
-                        let bg = '#f5f5f5';
-                        if (m.includes('18')) bg = '#fff3e0';
-                        else if (m.includes('10')) bg = '#e3f2fd';
-                        else if (m.includes('лдсп')) bg = '#f3e6ff';
-                        return (
-                          <span key={idx} style={{
-                            background: bg,
-                            color: '#b23c17',
-                            fontStyle: 'italic',
-                            fontWeight: 400,
-                            fontSize: 11,
-                            padding: '1px 7px',
-                            borderRadius: 6,
-                            marginRight: idx !== arr.length - 1 ? 4 : 0
-                          }}>{mat.trim()}</span>
-                        );
-                      })}
-                      {(() => {
-                        const ot = String(order["Отрисован"] ?? '').toLowerCase();
-                        return (ot.includes('отрис') || ot.includes('cad')) && (
-                          <span style={{ color: '#1976d2', fontWeight: 700, fontSize: 22, marginLeft: 4, lineHeight: 1 }}>О</span>
-                        );
-                      })()}
+                ) : dayOrders.map(order => {
+                  const isIssued = String(order["Статус"] ?? '').toLowerCase() === 'выдан';
+                  return (
+                    <div
+                      key={order._id || order["Номер заказа"] || Math.random()}
+                      style={{
+                        border: String(order["Статус"] ?? '').toLowerCase() === 'готов'
+                          ? '2px solid #4caf50'
+                          : '1px solid var(--color-card-border)',
+                        borderRadius: 7,
+                        background: getStatusColor(order["Статус"]),
+                        color: 'var(--color-text)',
+                        boxShadow: 'var(--shadow-xs)',
+                        padding: 10,
+                        fontSize: 14,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4,
+                        position: 'relative'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                        {/* Чекбокс */}
+                        <input
+                          type="checkbox"
+                          checked={isIssued}
+                          onChange={(e) => handleCheckboxChange(order, e.target.checked)}
+                          onClick={(e) => e.stopPropagation()} // Чтобы клик по чекбоксу не влиял на другие события карточки
+                          style={{
+                            width: 18,
+                            height: 18,
+                            marginRight: 8,
+                            cursor: 'pointer',
+                            accentColor: '#1976d2' // Цвет галочки
+                          }}
+                          title={isIssued ? "Отменить выдачу" : "Отметить как выданный"}
+                        />
+                        <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 18 }}>
+                          {order["Номер заказа"] || ''}
+                        </span>
+                        {order["Материал"] && String(order["Материал"]).split(',').map((mat, idx, arr) => {
+                          const m = mat.trim().toLowerCase();
+                          let bg = '#f5f5f5';
+                          if (m.includes('18')) bg = '#fff3e0';
+                          else if (m.includes('10')) bg = '#e3f2fd';
+                          else if (m.includes('лдсп')) bg = '#f3e6ff';
+                          return (
+                            <span key={idx} style={{
+                              background: bg,
+                              color: '#b23c17',
+                              fontStyle: 'italic',
+                              fontWeight: 400,
+                              fontSize: 11,
+                              padding: '1px 7px',
+                              borderRadius: 6,
+                              marginRight: idx !== arr.length - 1 ? 4 : 0
+                            }}>{mat.trim()}</span>
+                          );
+                        })}
+                        {(() => {
+                          const ot = String(order["Отрисован"] ?? '').toLowerCase();
+                          return (ot.includes('отрис') || ot.includes('cad')) && (
+                            <span style={{ color: '#1976d2', fontWeight: 700, fontSize: 22, marginLeft: 4, lineHeight: 1 }}>О</span>
+                          );
+                        })()}
+                      </div>
+                      <div style={{ fontSize: 11, marginBottom: 2 }}>
+                        {order["Фрезеровка"] ? `. ${order["Фрезеровка"]}` : ''}
+                        {order["Площадь заказа"] ? ` – ${String(order["Площадь заказа"]).replace(',', '.')} кв.м.` : ''}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#888' }}>
+                        {order["Планируемая дата выдачи"] ? `${order["Планируемая дата выдачи"]} • ` : ''}
+                        {order["Клиент"] || ''}
+                        {order["Оплата"] ? ` • ${order["Оплата"]}` : ''}
+                      </div>
+                      {/* Отображение статуса "Выдан" */}
+                      {isIssued && (
+                        <div style={{
+                          marginTop: 4,
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: 'var(--color-success, green)' // Можно настроить цвет
+                        }}>
+                          Выдан
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontSize: 11, marginBottom: 2 }}>
-                      {order["Фрезеровка"] ? `. ${order["Фрезеровка"]}` : ''}
-                      {order["Площадь заказа"] ? ` – ${String(order["Площадь заказа"]).replace(',', '.')} кв.м.` : ''}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#888' }}>
-                      {order["Планируемая дата выдачи"] ? `${order["Планируемая дата выдачи"]} • ` : ''}
-                      {order["Клиент"] || ''}
-                      {order["Оплата"] ? ` • ${order["Оплата"]}` : ''}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

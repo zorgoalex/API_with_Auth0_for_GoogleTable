@@ -1,11 +1,11 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 import { HotTable } from '@handsontable/react';
 import { useAuth0 } from '@auth0/auth0-react';
 
 // Импорт стилей Handsontable
 import 'handsontable/dist/handsontable.full.min.css';
 
-export default function DataTable({ onOrdersChange }) {
+const DataTable = forwardRef(({ onOrdersChange }, ref) => {
   const hotTableRef = useRef(null);
   const writeTimeoutRef = useRef(null);
   const pendingChanges = useRef([]);
@@ -26,6 +26,13 @@ export default function DataTable({ onOrdersChange }) {
   // Константы
   const WRITE_DEBOUNCE = 500; // 0.5 сек дебаунс для записей
   const FALLBACK_POLL_INTERVAL = 5000; // Fallback polling каждые 5 сек
+
+  // Эффект для вызова onOrdersChange при изменении data
+  useEffect(() => {
+    if (typeof onOrdersChange === 'function') {
+      onOrdersChange(data);
+    }
+  }, [data, onOrdersChange]); // Зависимости: data и onOrdersChange (теперь onOrdersChange стабилен)
 
   // Загрузка данных
   const loadData = async (showLoader = false) => {
@@ -60,9 +67,6 @@ export default function DataTable({ onOrdersChange }) {
       const newDataHash = JSON.stringify(rows);
       if (lastModified !== newDataHash) {
         setData(rows);
-        if (typeof onOrdersChange === 'function') {
-          onOrdersChange(rows);
-        }
         setLastModified(newDataHash);
         setLastUpdateTime(new Date());
         console.log('Data updated from Google Sheets');
@@ -176,48 +180,58 @@ export default function DataTable({ onOrdersChange }) {
   const flushPendingChanges = async () => {
     if (pendingChanges.current.length === 0) return;
     
-    const changes = [...pendingChanges.current];
-    pendingChanges.current = [];
+    const changesToFlush = [...pendingChanges.current]; // Копируем изменения для обработки
+    pendingChanges.current = []; // Очищаем очередь
     
+    console.log('Flushing changes:', changesToFlush);
+
     try {
-      // Группируем изменения по строкам
-      const groupedChanges = changes.reduce((acc, change) => {
-        const { rowIndex, data: changeData } = change;
-        if (!acc[rowIndex]) acc[rowIndex] = { rowIndex, data: {} };
-        Object.assign(acc[rowIndex].data, changeData);
-        return acc;
-      }, {});
-      
-      // Batch update всех изменений
-      for (const { rowIndex, data: changeData } of Object.values(groupedChanges)) {
-        const rowData = data[rowIndex];
-        if (rowData && rowData._id) {
-          const updateData = { ...rowData, ...changeData, rowId: rowData._id };
+      // Группируем изменения по строкам - уже не нужно, если каждое изменение - отдельный объект для строки
+      // Вместо этого, итерируемся по каждому изменению в очереди
+      for (const change of changesToFlush) {
+        const { rowIndex, data: changeData, rowId } = change; // rowId добавлен для прямого обновления
+        
+        let currentRowData = data.find(row => row._id === rowId); // Находим актуальные данные строки по ID
+        if (!currentRowData && rowIndex !== undefined && data[rowIndex]?._id === rowId) {
+           // Фоллбэк на случай, если ID есть, но строка еще не найдена по нему в текущем `data`,
+           // но rowIndex и rowId совпадают с тем, что в `data`
+           currentRowData = data[rowIndex];
+        }
+
+        if (currentRowData) {
+          const updatePayload = { ...currentRowData, ...changeData, rowId: currentRowData._id };
           
+          console.log('Sending update to API:', updatePayload);
           const response = await makeAPIRequest('/api/sheet', {
             method: 'PUT',
-            body: JSON.stringify(updateData)
+            body: JSON.stringify(updatePayload)
           });
           
           if (!response.ok) {
-            throw new Error('Failed to update batch');
+            console.error('Failed to update row:', updatePayload, 'Response:', response);
+            // Важно: если ошибка, изменения могут быть потеряны или нужно их вернуть в очередь
+            // Пока что просто логируем и позволяем loadData() ниже исправить несоответствия
+            throw new Error(`Failed to update row ${currentRowData._id}`);
           }
           
-          // Обновляем локальные данные
-          const newData = [...data];
-          newData[rowIndex] = { ...newData[rowIndex], ...changeData };
-          setData(newData);
-          if (typeof onOrdersChange === 'function') {
-            onOrdersChange(newData);
-          }
+          // Обновляем локальные данные ОПТИМИСТИЧНО или после ответа сервера
+          setData(currentData => {
+            const newData = currentData.map(row => 
+              row._id === currentRowData._id ? { ...row, ...changeData } : row
+            );
+            return newData;
+          });
+          console.log(`Row ${currentRowData._id} updated successfully locally and on server.`);
+        } else {
+          console.warn('Could not find row data for change:', change, 'Current data state:', data);
         }
       }
       
-      console.log(`Batch updated ${Object.keys(groupedChanges).length} rows`);
+      console.log(`Batch of ${changesToFlush.length} changes processed.`);
     } catch (err) {
       console.error('Error in batch update:', err);
-      // При ошибке перезагружаем данные
-      loadData(false);
+      // При ошибке перезагружаем данные, чтобы восстановить консистентность
+      loadData(false); 
     }
   };
 
@@ -278,9 +292,6 @@ export default function DataTable({ onOrdersChange }) {
       const newData = [...data];
       newData.splice(index, 0, newRow);
       setData(newData);
-      if (typeof onOrdersChange === 'function') {
-        onOrdersChange(newData);
-      }
     } catch (err) {
       console.error('Error creating row:', err);
       // Удаляем созданную строку при ошибке
@@ -310,9 +321,6 @@ export default function DataTable({ onOrdersChange }) {
       const newData = [...data];
       newData.splice(index, amount);
       setData(newData);
-      if (typeof onOrdersChange === 'function') {
-        onOrdersChange(newData);
-      }
     } catch (err) {
       console.error('Error deleting row:', err);
       // Перезагружаем данные при ошибке
@@ -472,6 +480,39 @@ export default function DataTable({ onOrdersChange }) {
     reconnectAttemptsRef.current = 0;
   };
 
+  // API для родительского компонента
+  useImperativeHandle(ref, () => ({
+    updateOrderFields: (orderId, fieldsToUpdate) => {
+      console.log(`DataTable: updateOrderFields called for orderId: ${orderId}`, fieldsToUpdate);
+      const rowIndex = data.findIndex(row => row._id === orderId);
+      if (rowIndex === -1) {
+        console.error(`Order with ID ${orderId} not found in DataTable.`);
+        return Promise.reject(new Error(`Order with ID ${orderId} not found`));
+      }
+
+      // Добавляем изменение в очередь, указывая и rowIndex, и rowId для надежности
+      pendingChanges.current.push({
+        rowIndex: rowIndex,
+        rowId: orderId, // Передаем ID для более надежного поиска в flushPendingChanges
+        data: fieldsToUpdate
+      });
+      
+      // Сбрасываем предыдущий таймер, если он был
+      if (writeTimeoutRef.current) {
+        clearTimeout(writeTimeoutRef.current);
+      }
+      
+      // Устанавливаем новый таймер или вызываем немедленно, если нужно
+      // Для одиночных обновлений статуса можно сделать задержку меньше или убрать
+      // Но для консистентности с пакетными правками из таблицы, оставим дебаунс
+      writeTimeoutRef.current = setTimeout(() => {
+        flushPendingChanges();
+      }, WRITE_DEBOUNCE); // Используем существующий дебаунс
+      
+      return Promise.resolve();
+    }
+  }), [data]);
+
   if (loading) {
     return <div className="loading">Загрузка данных...</div>;
   }
@@ -564,4 +605,6 @@ export default function DataTable({ onOrdersChange }) {
       </div>
     </div>
   );
-}
+});
+
+export default DataTable;

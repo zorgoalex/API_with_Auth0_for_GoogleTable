@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
-import dynamic from 'next/dynamic';
-import KanbanBoard from './KanbanBoard'; // <--- добавили импорт
+// import dynamic from 'next/dynamic'; // <--- Комментируем динамический импорт
+import DataTable from './DataTable';    // <--- Добавляем статический импорт
+import KanbanBoard from './KanbanBoard';
+// import React from 'react'; // <--- УДАЛЯЕМ ЭТОТ ЛИШНИЙ ИМПОРТ
 
 // Динамический импорт DataTable
+/* // <--- Комментируем блок dynamic
 const DataTable = dynamic(() => import('./DataTable'), {
   ssr: false
 });
+*/
 
 // Эту функцию можно вынести в утилиты, если она будет использоваться еще где-то
 function generateDays(centerDateInput, range = 3) {
@@ -36,6 +40,7 @@ export default function Layout({ isAuthenticated, user }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // для десктопа
   const [generatedDays, setGeneratedDays] = useState([]);
   const [allOrders, setAllOrders] = useState([]); // <--- Новое состояние для заказов
+  const dataTableRef = useRef(null); // <--- Ref для DataTable
 
   useEffect(() => {
     // Генерируем дни один раз при монтировании компонента
@@ -43,12 +48,31 @@ export default function Layout({ isAuthenticated, user }) {
     setGeneratedDays(generateDays(new Date(), 3)); 
   }, []);
 
-  // Функция для обновления заказов из DataTable
-  const handleOrdersUpdate = (updatedOrders) => {
+  // Функция для обновления заказов из DataTable - теперь мемоизирована
+  const handleOrdersUpdate = useCallback((updatedOrders) => {
     if (Array.isArray(updatedOrders)) {
+      // console.log('Layout: Updating allOrders', updatedOrders);
       setAllOrders(updatedOrders);
     }
-  };
+  }, []); // Массив зависимостей пуст, т.к. setAllOrders стабилен
+
+  // Функция для обновления статуса заказа через DataTable - также мемоизируем, если она использует состояния Layout
+  // В данном случае она использует dataTableRef, который стабилен, и не использует состояния Layout, которые меняются
+  // Но для хорошей практики, если бы она зависела от чего-то из Layout, мы бы добавили это в зависимости.
+  const handleOrderStatusUpdate = useCallback(async (orderId, fieldsToUpdate) => {
+    console.log('handleOrderStatusUpdate called for orderId:', orderId, 'Fields:', fieldsToUpdate);
+    console.log('dataTableRef.current in handleOrderStatusUpdate:', dataTableRef.current);
+    if (dataTableRef.current && typeof dataTableRef.current.updateOrderFields === 'function') {
+      try {
+        await dataTableRef.current.updateOrderFields(orderId, fieldsToUpdate);
+        console.log(`Order ${orderId} status update triggered with fields:`, fieldsToUpdate);
+      } catch (error) {
+        console.error('Error triggering order status update:', error);
+      }
+    } else {
+      console.warn('DataTable ref or updateOrderFields method not available.');
+    }
+  }, []); // dataTableRef стабилен, поэтому массив зависимостей пуст
 
   // Обработка изменения размера окна
   useEffect(() => {
@@ -176,7 +200,10 @@ export default function Layout({ isAuthenticated, user }) {
           {/* Вид таблицы */}
           <div className={`view ${currentView === 'table' ? 'active' : ''}`}>
             {isAuthenticated ? (
-              <DataTable onOrdersChange={handleOrdersUpdate} />
+              <DataTable 
+                ref={dataTableRef}
+                onOrdersChange={handleOrdersUpdate} 
+              />
             ) : (
               <div className="auth-placeholder">
                 <div className="auth-message">
@@ -191,7 +218,11 @@ export default function Layout({ isAuthenticated, user }) {
           {/* Вид Канбан */}
           <div className={`view ${currentView === 'kanban' ? 'active' : ''}`}>
             {isAuthenticated ? (
-              <KanbanBoard days={generatedDays} orders={allOrders} />
+              <KanbanBoard 
+                days={generatedDays} 
+                orders={allOrders} 
+                onOrderStatusUpdate={handleOrderStatusUpdate}
+              />
             ) : (
               <div className="analytics-placeholder">
                 <div className="placeholder-content">
