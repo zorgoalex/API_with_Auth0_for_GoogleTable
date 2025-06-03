@@ -45,8 +45,7 @@ function groupOrdersByDate(orders) {
 function getStatusColor(status) {
   if (!status) return 'var(--color-background)';
   const s = status.toLowerCase();
-  if (s === 'выдан') return 'var(--color-success)';
-  if (s === 'готов') return '#d6f5d6'; // светло-зеленый
+  if (s === 'выдан') return '#eafbe7'; // очень светло-зеленый фон
   return 'var(--color-background)';
 }
 
@@ -90,8 +89,7 @@ export default function KanbanBoard() {
   const ordersMap = groupOrdersByDate(orders);
 
   return (
-    <div style={{ width: '100%', overflowX: 'auto', padding: 16 }}>
-      <h2 style={{ marginBottom: 24, fontWeight: 600 }}>Канбан-доска заказов</h2>
+    <div style={{ width: '100%', overflowX: 'auto', padding: 16, background: '#fdfdfe' }}>
       {loading ? (
         <div>Загрузка…</div>
       ) : error ? (
@@ -114,7 +112,7 @@ export default function KanbanBoard() {
                   boxShadow: 'var(--shadow-md)',
                   padding: 12,
                   minHeight: 120,
-                  border: '1px solid var(--color-border)'
+                  border: '1px solid #bfc3c9'
                 }}
               >
                 <div style={{ marginBottom: 8, fontWeight: 500, fontSize: 16 }}>
@@ -136,7 +134,9 @@ export default function KanbanBoard() {
                     <div
                       key={order._id || order["Номер заказа"] || Math.random()}
                       style={{
-                        border: '1px solid var(--color-card-border)',
+                        border: order["Статус"]?.toLowerCase() === 'готов'
+                          ? '2px solid #4caf50'
+                          : '1px solid var(--color-card-border)',
                         borderRadius: 7,
                         background: getStatusColor(order["Статус"]),
                         color: 'var(--color-text)',
@@ -155,11 +155,13 @@ export default function KanbanBoard() {
                         </span>
                       </div>
                       <div style={{ fontSize: 11, marginBottom: 2 }}>
-                        {order["Площадь заказа"] ? `. ${String(order["Площадь заказа"]).replace(',', '.')} кв.м.` : ''}
+                        {order["Фрезеровка"] ? `. ${order["Фрезеровка"]}` : ''}
+                        {order["Площадь заказа"] ? ` – ${String(order["Площадь заказа"]).replace(',', '.')} кв.м.` : ''}
                       </div>
                       <div style={{ fontSize: 12, color: '#888' }}>
+                        {order["Планируемая дата выдачи"] ? `${order["Планируемая дата выдачи"]} • ` : ''}
                         {order["Клиент"] || ''}
-                        {order["Статус"] ? ` • ${order["Статус"]}` : ''}
+                        {order["Оплата"] ? ` • ${order["Оплата"]}` : ''}
                       </div>
                     </div>
                   ))}
