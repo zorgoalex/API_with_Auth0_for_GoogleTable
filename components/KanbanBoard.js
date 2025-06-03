@@ -33,6 +33,9 @@ function generateDays(centerDate, range = 3) {
 }
 
 function groupOrdersByDate(orders) {
+  if (!Array.isArray(orders)) {
+    return {};
+  }
   const map = {};
   for (const order of orders) {
     const key = formatDateUniversal(order["Планируемая дата выдачи"]);
@@ -57,7 +60,7 @@ function capitalizeFirst(str) {
   return str[0].toUpperCase() + str.slice(1).toLowerCase();
 }
 
-export default function KanbanBoard({ orders, days }) {
+export default function KanbanBoard({ orders = [], days = [] }) {
   const ordersMap = groupOrdersByDate(orders);
 
   return (

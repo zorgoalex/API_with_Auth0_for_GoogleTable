@@ -8,11 +8,47 @@ const DataTable = dynamic(() => import('./DataTable'), {
   ssr: false
 });
 
+// Эту функцию можно вынести в утилиты, если она будет использоваться еще где-то
+function generateDays(centerDateInput, range = 3) {
+  let days = [];
+  // Убедимся, что centerDateInput валидна, иначе используем текущую дату
+  const centerDate = centerDateInput instanceof Date && !isNaN(centerDateInput) ? centerDateInput : new Date();
+  centerDate.setHours(0, 0, 0, 0);
+
+  for (let offset = -range; offset <= range; offset++) {
+    const d = new Date(centerDate);
+    d.setDate(centerDate.getDate() + offset);
+    // Пропускаем воскресенья, если это правило все еще актуально
+    // if (d.getDay() !== 0) { 
+    //   days.push(new Date(d));
+    // }
+    // Пока что будем добавлять все дни, включая ВС, для простоты. 
+    // Если нужно исключать ВС, раскомментируйте проверку выше.
+    days.push(new Date(d));
+  }
+  return days;
+}
+
 export default function Layout({ isAuthenticated, user }) {
   const { logout } = useAuth0();
   const [currentView, setCurrentView] = useState('table');
   const [sidebarOpen, setSidebarOpen] = useState(false); // для мобильных
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // для десктопа
+  const [generatedDays, setGeneratedDays] = useState([]);
+  const [allOrders, setAllOrders] = useState([]); // <--- Новое состояние для заказов
+
+  useEffect(() => {
+    // Генерируем дни один раз при монтировании компонента
+    // Можно использовать любую дату как центральную, например, new Date() для текущей
+    setGeneratedDays(generateDays(new Date(), 3)); 
+  }, []);
+
+  // Функция для обновления заказов из DataTable
+  const handleOrdersUpdate = (updatedOrders) => {
+    if (Array.isArray(updatedOrders)) {
+      setAllOrders(updatedOrders);
+    }
+  };
 
   // Обработка изменения размера окна
   useEffect(() => {
@@ -140,7 +176,7 @@ export default function Layout({ isAuthenticated, user }) {
           {/* Вид таблицы */}
           <div className={`view ${currentView === 'table' ? 'active' : ''}`}>
             {isAuthenticated ? (
-              <DataTable />
+              <DataTable onOrdersChange={handleOrdersUpdate} />
             ) : (
               <div className="auth-placeholder">
                 <div className="auth-message">
@@ -155,7 +191,7 @@ export default function Layout({ isAuthenticated, user }) {
           {/* Вид Канбан */}
           <div className={`view ${currentView === 'kanban' ? 'active' : ''}`}>
             {isAuthenticated ? (
-              <KanbanBoard />
+              <KanbanBoard days={generatedDays} orders={allOrders} />
             ) : (
               <div className="analytics-placeholder">
                 <div className="placeholder-content">

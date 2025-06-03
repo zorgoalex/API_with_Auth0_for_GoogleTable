@@ -5,7 +5,7 @@ import { useAuth0 } from '@auth0/auth0-react';
 // Импорт стилей Handsontable
 import 'handsontable/dist/handsontable.full.min.css';
 
-export default function DataTable() {
+export default function DataTable({ onOrdersChange }) {
   const hotTableRef = useRef(null);
   const writeTimeoutRef = useRef(null);
   const pendingChanges = useRef([]);
@@ -60,6 +60,9 @@ export default function DataTable() {
       const newDataHash = JSON.stringify(rows);
       if (lastModified !== newDataHash) {
         setData(rows);
+        if (typeof onOrdersChange === 'function') {
+          onOrdersChange(rows);
+        }
         setLastModified(newDataHash);
         setLastUpdateTime(new Date());
         console.log('Data updated from Google Sheets');
@@ -204,6 +207,9 @@ export default function DataTable() {
           const newData = [...data];
           newData[rowIndex] = { ...newData[rowIndex], ...changeData };
           setData(newData);
+          if (typeof onOrdersChange === 'function') {
+            onOrdersChange(newData);
+          }
         }
       }
       
@@ -272,6 +278,9 @@ export default function DataTable() {
       const newData = [...data];
       newData.splice(index, 0, newRow);
       setData(newData);
+      if (typeof onOrdersChange === 'function') {
+        onOrdersChange(newData);
+      }
     } catch (err) {
       console.error('Error creating row:', err);
       // Удаляем созданную строку при ошибке
@@ -301,6 +310,9 @@ export default function DataTable() {
       const newData = [...data];
       newData.splice(index, amount);
       setData(newData);
+      if (typeof onOrdersChange === 'function') {
+        onOrdersChange(newData);
+      }
     } catch (err) {
       console.error('Error deleting row:', err);
       // Перезагружаем данные при ошибке
