@@ -34,6 +34,51 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
     }
   }, [data, onOrdersChange]); // Зависимости: data и onOrdersChange (теперь onOrdersChange стабилен)
 
+  // Эффект для обновления размеров таблицы и попытки коррекции высоты wtHolder
+  useEffect(() => {
+    if (hotTableRef.current && hotTableRef.current.hotInstance) {
+      const timer = setTimeout(() => {
+        const hotInstance = hotTableRef.current?.hotInstance;
+        if (hotInstance) {
+          console.log('Refreshing Handsontable dimensions...');
+          hotInstance.render(); // Попробуем render() вместо refreshDimensions() или вместе с ним
+          hotInstance.refreshDimensions();
+
+          // Попытка найти и изменить стиль wtHolder
+          if (hotInstance.rootElement) { 
+            const wtHolder = hotInstance.rootElement.querySelector('.ht_master .wtHolder'); 
+            if (wtHolder) {
+              console.log('Found .wtHolder, current inline height:', wtHolder.style.height);
+              // Удаляем инлайновый height, если он есть, чтобы CSS !important мог сработать
+              // wtHolder.style.removeProperty('height'); 
+              // ИЛИ принудительно ставим 100%
+              wtHolder.style.setProperty('height', '100%', 'important'); 
+              console.log('Attempted to set .wtHolder style.height to 100% !important. New inline height:', wtHolder.style.height);
+              
+              // Проверяем, изменилась ли высота и есть ли скролл
+              // Это может потребовать еще одного цикла рендеринга или небольшой задержки
+              if (wtHolder.scrollHeight > wtHolder.clientHeight) {
+                console.log('.wtHolder should now have a scrollbar.');
+              } else {
+                console.log('.wtHolder does not seem to need a scrollbar or height adjustment failed.');
+              }
+            } else {
+              console.warn('.wtHolder not found using selector .ht_master .wtHolder');
+              // Попробуем найти wtHolder без .ht_master, если структура другая
+              const simplerWtHolder = hotInstance.rootElement.querySelector('.wtHolder');
+              if (simplerWtHolder) {
+                console.log('Found .wtHolder with simpler selector, current inline height:', simplerWtHolder.style.height);
+                simplerWtHolder.style.setProperty('height', '100%', 'important');
+                console.log('Attempted to set simpler .wtHolder style.height to 100% !important.');
+              }
+            }
+          }
+        }
+      }, 100); // Немного увеличим таймаут, чтобы Handsontable точно завершил свои операции
+      return () => clearTimeout(timer);
+    }
+  }, [data, loading]); // Добавим loading в зависимости, чтобы сработало после первой загрузки
+
   // Загрузка данных
   const loadData = async (showLoader = false) => {
     try {
@@ -587,7 +632,7 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
             colHeaders={columns}
             rowHeaders={true}
             width="100%"
-            height="500"
+            height="100%"
             licenseKey="non-commercial-and-evaluation"
             contextMenu={true}
             manualRowResize={true}

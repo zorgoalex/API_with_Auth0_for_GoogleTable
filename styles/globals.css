@@ -569,6 +569,31 @@ p {
   height: 100% !important;
 }
 
+/* Добавляем стили для внутреннего viewport Handsontable */
+.handsontable .ht_master .wtHolder { /* wtHolder отвечает за скроллинг */
+  overflow: auto !important; /* Важно для появления скроллбаров */
+  height: 100% !important; /* Убедимся, что он пытается занять всю высоту родителя */
+  width: 100% !important; /* И всю ширину */
+}
+
+/* Иногда overflow нужно ставить на сам ht_master или его непосредственную обертку wtHolder */
+.handsontable .ht_master {
+  overflow: hidden !important; /* Чтобы не было двойных скроллов, если wtHolder уже скроллится */
+}
+
+/* Заставляем внутренние элементы таблицы растягиваться по содержимому */
+.handsontable .ht_master .wtHolder .wtHider {
+  height: auto !important;
+  min-height: 100% !important; /* Попытка заставить его быть как минимум высотой родителя, но auto должно позволить расти */
+  position: relative !important; /* Иногда position:absolute мешает правильному расчету высоты родителя */
+}
+
+.handsontable .ht_master .wtHolder .wtHider .htCore {
+  height: auto !important;
+  min-height: initial !important; /* Сбрасываем min-height, если он мешает auto */
+  display: table !important; /* Убедимся, что это таблица */
+}
+
 .refresh-button {
   padding: 6px 12px;
   border: 1px solid var(--color-border);
