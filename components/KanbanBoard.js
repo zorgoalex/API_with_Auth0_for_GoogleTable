@@ -97,8 +97,9 @@ export default function KanbanBoard() {
       ) : (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${days.length}, minmax(220px, 1fr))`,
-          gap: 16
+          gridTemplateColumns: `repeat(${days.length}, 260px)`,
+          gap: 16,
+          minWidth: days.length * 260 + (days.length - 1) * 16
         }}>
           {days.map((day) => {
             const key = formatDateUniversal(day);
