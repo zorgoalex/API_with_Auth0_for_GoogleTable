@@ -12,24 +12,54 @@ const DataTable = dynamic(() => import('./DataTable'), {
 });
 */
 
-// Эту функцию можно вынести в утилиты, если она будет использоваться еще где-то
-function generateDays(centerDateInput, range = 3) {
-  let days = [];
-  // Убедимся, что centerDateInput валидна, иначе используем текущую дату
-  const centerDate = centerDateInput instanceof Date && !isNaN(centerDateInput) ? centerDateInput : new Date();
-  centerDate.setHours(0, 0, 0, 0);
-
-  for (let offset = -range; offset <= range; offset++) {
-    const d = new Date(centerDate);
-    d.setDate(centerDate.getDate() + offset);
-    // Пропускаем воскресенья, если это правило все еще актуально
-    // if (d.getDay() !== 0) { 
-    //   days.push(new Date(d));
-    // }
-    // Пока что будем добавлять все дни, включая ВС, для простоты. 
-    // Если нужно исключать ВС, раскомментируйте проверку выше.
-    days.push(new Date(d));
+// Функция для генерации дней на основе заказов (как в next-5.md)
+function initializeDays(orders = []) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Начинаем за 5 дней до сегодня
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() - 5);
+  
+  // Находим максимальную планируемую дату из заказов
+  let maxPlannedDate = new Date(today);
+  
+  if (orders.length > 0) {
+    maxPlannedDate = orders.reduce((maxDate, order) => {
+      const plannedDateStr = order["Планируемая дата выдачи"];
+      if (!plannedDateStr) return maxDate;
+      
+      // Парсим дату в формате DD.MM.YYYY
+      const [day, month, year] = plannedDateStr.split('.');
+      if (day && month && year) {
+        const plannedDate = new Date(year, month - 1, day);
+        plannedDate.setHours(0, 0, 0, 0);
+        return plannedDate > maxDate ? plannedDate : maxDate;
+      }
+      return maxDate;
+    }, new Date(today));
   }
+  
+  // Конечная дата: максимальная планируемая дата + 1 день
+  let endDate = new Date(maxPlannedDate);
+  endDate.setDate(maxPlannedDate.getDate() + 1);
+  
+  // Если конечная дата - воскресенье, сдвигаем до понедельника
+  while (endDate.getDay() === 0) {
+    endDate.setDate(endDate.getDate() + 1);
+  }
+  
+  // Генерируем массив дней, пропуская воскресенья
+  const days = [];
+  let currentDate = new Date(startDate);
+  
+  while (currentDate <= endDate) {
+    if (currentDate.getDay() !== 0) { // Пропускаем воскресенья (0)
+      days.push(new Date(currentDate));
+    }
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  
   return days;
 }
 
@@ -43,10 +73,17 @@ export default function Layout({ isAuthenticated, user }) {
   const dataTableRef = useRef(null); // <--- Ref для DataTable
 
   useEffect(() => {
-    // Генерируем дни один раз при монтировании компонента
-    // Можно использовать любую дату как центральную, например, new Date() для текущей
-    setGeneratedDays(generateDays(new Date(), 3)); 
+    // Начальная генерация дней при монтировании компонента
+    setGeneratedDays(initializeDays([])); 
   }, []);
+
+  // Пересчитываем дни при изменении заказов
+  useEffect(() => {
+    if (allOrders.length > 0) {
+      const newDays = initializeDays(allOrders);
+      setGeneratedDays(newDays);
+    }
+  }, [allOrders]);
 
   // Функция для обновления заказов из DataTable - теперь мемоизирована
   const handleOrdersUpdate = useCallback((updatedOrders) => {
