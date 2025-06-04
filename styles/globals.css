@@ -569,29 +569,57 @@ p {
   height: 100% !important;
 }
 
-/* Добавляем стили для внутреннего viewport Handsontable */
-.handsontable .ht_master .wtHolder { /* wtHolder отвечает за скроллинг */
-  overflow: auto !important; /* Важно для появления скроллбаров */
-  height: 100% !important; /* Убедимся, что он пытается занять всю высоту родителя */
-  width: 100% !important; /* И всю ширину */
+/* Убираем конфликтующие стили, оставляем только базовые настройки overflow */
+.handsontable .ht_master .wtHolder {
+  overflow: auto !important;
+  overflow-y: scroll !important; /* Принудительно показываем вертикальный скролл */
+  overflow-x: auto !important;
+  width: 100% !important;
+  /* height будет устанавливаться через JavaScript в пикселях */
 }
 
-/* Иногда overflow нужно ставить на сам ht_master или его непосредственную обертку wtHolder */
+/* Убираем любые стили которые могут скрывать скроллбар */
+.handsontable .ht_master .wtHolder::-webkit-scrollbar {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.handsontable .ht_master .wtHolder::-webkit-scrollbar-track {
+  background: #f1f1f1 !important;
+}
+
+.handsontable .ht_master .wtHolder::-webkit-scrollbar-thumb {
+  background: #888 !important;
+  border-radius: 6px !important;
+}
+
+.handsontable .ht_master .wtHolder::-webkit-scrollbar-thumb:hover {
+  background: #555 !important;
+}
+
 .handsontable .ht_master {
-  overflow: hidden !important; /* Чтобы не было двойных скроллов, если wtHolder уже скроллится */
+  overflow: hidden !important;
+  height: 100% !important;
 }
 
-/* Заставляем внутренние элементы таблицы растягиваться по содержимому */
+/* Убираем принудительные стили высоты для внутренних элементов */
 .handsontable .ht_master .wtHolder .wtHider {
-  height: auto !important;
-  min-height: 100% !important; /* Попытка заставить его быть как минимум высотой родителя, но auto должно позволить расти */
-  position: relative !important; /* Иногда position:absolute мешает правильному расчету высоты родителя */
+  position: relative !important;
+  min-height: 100% !important;
 }
 
 .handsontable .ht_master .wtHolder .wtHider .htCore {
-  height: auto !important;
-  min-height: initial !important; /* Сбрасываем min-height, если он мешает auto */
-  display: table !important; /* Убедимся, что это таблица */
+  display: table !important;
+  min-height: 100% !important;
+}
+
+/* Дополнительные правила для корректной работы скролла */
+.handsontable .ht_master .wtHolder .wtHider .htCore tbody {
+  min-height: inherit;
+}
+
+.handsontable .ht_master .wtHolder .wtHider .htCore tbody tr {
+  height: auto;
 }
 
 .refresh-button {

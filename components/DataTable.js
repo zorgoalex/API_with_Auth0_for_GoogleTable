@@ -19,6 +19,7 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
   const [isPolling, setIsPolling] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [tableHeight, setTableHeight] = useState(500); // Добавляем состояние для высоты таблицы
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
   const { getAccessTokenSilently } = useAuth0();
@@ -39,45 +40,155 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
     if (hotTableRef.current && hotTableRef.current.hotInstance) {
       const timer = setTimeout(() => {
         const hotInstance = hotTableRef.current?.hotInstance;
-        if (hotInstance) {
+        if (hotInstance && hotInstance.rootElement) {
           console.log('Refreshing Handsontable dimensions...');
-          hotInstance.render(); // Попробуем render() вместо refreshDimensions() или вместе с ним
-          hotInstance.refreshDimensions();
-
-          // Попытка найти и изменить стиль wtHolder
-          if (hotInstance.rootElement) { 
-            const wtHolder = hotInstance.rootElement.querySelector('.ht_master .wtHolder'); 
+          
+          // Находим родительский контейнер таблицы (.table-wrapper)
+          const tableWrapper = hotInstance.rootElement.closest('.table-wrapper');
+          if (tableWrapper) {
+            // Получаем реальную высоту контейнера в пикселях
+            const containerHeight = tableWrapper.clientHeight;
+            console.log('Table wrapper height:', containerHeight, 'px');
+            
+            // Обновляем состояние высоты таблицы
+            setTableHeight(containerHeight);
+            
+            // Пробуем обновить размеры через Handsontable API
+            try {
+              hotInstance.updateSettings({
+                height: containerHeight,
+                width: '100%'
+              });
+              console.log('Updated Handsontable settings with height:', containerHeight);
+            } catch (error) {
+              console.error('Error updating Handsontable settings:', error);
+            }
+            
+            // Дополнительно устанавливаем высоту напрямую
+            const wtHolder = hotInstance.rootElement.querySelector('.ht_master .wtHolder');
             if (wtHolder) {
-              console.log('Found .wtHolder, current inline height:', wtHolder.style.height);
-              // Удаляем инлайновый height, если он есть, чтобы CSS !important мог сработать
-              // wtHolder.style.removeProperty('height'); 
-              // ИЛИ принудительно ставим 100%
-              wtHolder.style.setProperty('height', '100%', 'important'); 
-              console.log('Attempted to set .wtHolder style.height to 100% !important. New inline height:', wtHolder.style.height);
+              console.log('Found .wtHolder, current styles:');
+              console.log('- offsetHeight:', wtHolder.offsetHeight);
+              console.log('- clientHeight:', wtHolder.clientHeight);
+              console.log('- scrollHeight:', wtHolder.scrollHeight);
+              console.log('- style.height:', wtHolder.style.height);
               
-              // Проверяем, изменилась ли высота и есть ли скролл
-              // Это может потребовать еще одного цикла рендеринга или небольшой задержки
-              if (wtHolder.scrollHeight > wtHolder.clientHeight) {
-                console.log('.wtHolder should now have a scrollbar.');
-              } else {
-                console.log('.wtHolder does not seem to need a scrollbar or height adjustment failed.');
-              }
+              // Устанавливаем фиксированную высоту в пикселях
+              wtHolder.style.setProperty('height', `${containerHeight}px`, 'important');
+              wtHolder.style.setProperty('overflow', 'auto', 'important');
+              wtHolder.style.setProperty('max-height', `${containerHeight}px`, 'important');
+              
+              console.log(`Set .wtHolder height to ${containerHeight}px`);
+              
+              // Принудительно перерендериваем Handsontable
+              hotInstance.render();
+              hotInstance.refreshDimensions();
+              
+              // Добавляем обработчик скролла для тестирования
+              const scrollHandler = (e) => {
+                console.log('wtHolder scroll event:', e.target.scrollTop);
+              };
+              wtHolder.removeEventListener('scroll', scrollHandler); // Удаляем предыдущий если есть
+              wtHolder.addEventListener('scroll', scrollHandler);
+              
+              // Проверяем результат после небольшой задержки
+              setTimeout(() => {
+                console.log('After render - .wtHolder styles:');
+                console.log('- offsetHeight:', wtHolder.offsetHeight);
+                console.log('- clientHeight:', wtHolder.clientHeight);
+                console.log('- scrollHeight:', wtHolder.scrollHeight);
+                console.log('- style.height:', wtHolder.style.height);
+                console.log('- computed overflow-y:', window.getComputedStyle(wtHolder)['overflow-y']);
+                console.log('- computed overflow-x:', window.getComputedStyle(wtHolder)['overflow-x']);
+                
+                if (wtHolder.scrollHeight > wtHolder.clientHeight) {
+                  console.log('✅ .wtHolder now has scrollable content!');
+                  
+                  // Тестируем программный скролл
+                  setTimeout(() => {
+                    console.log('Testing programmatic scroll...');
+                    wtHolder.scrollTop = 100;
+                    setTimeout(() => {
+                      console.log('After programmatic scroll, scrollTop:', wtHolder.scrollTop);
+                    }, 100);
+                  }, 500);
+                  
+                } else {
+                  console.log('❌ wtHolder still not scrollable. Trying alternative approach...');
+                  
+                  // Альтернативный подход - устанавливаем фиксированную высоту строк
+                  try {
+                    const rowCount = data.length;
+                    const visibleRows = Math.floor(containerHeight / 23); // Примерная высота строки
+                    console.log(`Total rows: ${rowCount}, visible rows: ${visibleRows}`);
+                    
+                    if (rowCount > visibleRows) {
+                      hotInstance.updateSettings({
+                        height: containerHeight,
+                        renderAllRows: false,
+                        viewportRowRenderingOffset: 10
+                      });
+                      console.log('Applied virtualization settings');
+                    }
+                  } catch (err) {
+                    console.error('Error applying virtualization:', err);
+                  }
+                }
+              }, 100);
+              
             } else {
-              console.warn('.wtHolder not found using selector .ht_master .wtHolder');
-              // Попробуем найти wtHolder без .ht_master, если структура другая
-              const simplerWtHolder = hotInstance.rootElement.querySelector('.wtHolder');
-              if (simplerWtHolder) {
-                console.log('Found .wtHolder with simpler selector, current inline height:', simplerWtHolder.style.height);
-                simplerWtHolder.style.setProperty('height', '100%', 'important');
-                console.log('Attempted to set simpler .wtHolder style.height to 100% !important.');
-              }
+              console.warn('.wtHolder not found');
+            }
+          } else {
+            console.warn('.table-wrapper not found');
+          }
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [data, loading]);
+
+  // Обработчик изменения размера окна для пересчета высоты таблицы
+  useEffect(() => {
+    const handleResize = () => {
+      if (hotTableRef.current && hotTableRef.current.hotInstance) {
+        const hotInstance = hotTableRef.current.hotInstance;
+        if (hotInstance && hotInstance.rootElement) {
+          const tableWrapper = hotInstance.rootElement.closest('.table-wrapper');
+          if (tableWrapper) {
+            const containerHeight = tableWrapper.clientHeight;
+            
+            // Обновляем состояние высоты
+            setTableHeight(containerHeight);
+            
+            // Обновляем через API
+            try {
+              hotInstance.updateSettings({
+                height: containerHeight,
+                width: '100%'
+              });
+            } catch (error) {
+              console.error('Error updating Handsontable settings on resize:', error);
+            }
+            
+            // Дополнительно устанавливаем напрямую
+            const wtHolder = hotInstance.rootElement.querySelector('.ht_master .wtHolder');
+            if (wtHolder) {
+              wtHolder.style.setProperty('height', `${containerHeight}px`, 'important');
+              wtHolder.style.setProperty('max-height', `${containerHeight}px`, 'important');
+              hotInstance.render();
+              hotInstance.refreshDimensions();
+              console.log(`Resized .wtHolder height to ${containerHeight}px`);
             }
           }
         }
-      }, 100); // Немного увеличим таймаут, чтобы Handsontable точно завершил свои операции
-      return () => clearTimeout(timer);
-    }
-  }, [data, loading]); // Добавим loading в зависимости, чтобы сработало после первой загрузки
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Загрузка данных
   const loadData = async (showLoader = false) => {
@@ -632,7 +743,7 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
             colHeaders={columns}
             rowHeaders={true}
             width="100%"
-            height="100%"
+            height={tableHeight}
             licenseKey="non-commercial-and-evaluation"
             contextMenu={true}
             manualRowResize={true}
@@ -641,6 +752,10 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
             afterCreateRow={handleAfterCreateRow}
             afterRemoveRow={handleAfterRemoveRow}
             stretchH="all"
+            renderAllRows={false}
+            viewportRowRenderingOffset={10}
+            viewportColumnRenderingOffset={5}
+            preventOverflow="horizontal"
           />
         ) : (
           <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
