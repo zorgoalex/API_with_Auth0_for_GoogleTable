@@ -41,45 +41,24 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
       const timer = setTimeout(() => {
         const hotInstance = hotTableRef.current?.hotInstance;
         if (hotInstance && hotInstance.rootElement) {
-          const tableWrapper = hotInstance.rootElement.closest('.table-wrapper');
-          if (tableWrapper) {
-            const containerHeight = tableWrapper.clientHeight;
-            setTableHeight(containerHeight);
-            try {
-              hotInstance.updateSettings({
-                height: containerHeight,
-                width: '100%'
-              });
-              console.log('Updated Handsontable settings with height:', containerHeight);
-            } catch (error) {
-              console.error('Error updating Handsontable settings:', error);
-            }
-            // === Диагностика scroll ===
-            const wtHolder = hotInstance.rootElement.querySelector('.ht_master .wtHolder');
-            if (wtHolder) {
-              console.log('[DEBUG] .wtHolder:', {
-                offsetHeight: wtHolder.offsetHeight,
-                clientHeight: wtHolder.clientHeight,
-                scrollHeight: wtHolder.scrollHeight,
-                styleHeight: wtHolder.style.height,
-                overflowY: window.getComputedStyle(wtHolder)['overflow-y'],
-              });
-              // Вешаем обработчики событий
-              wtHolder.addEventListener('wheel', e => {
-                console.log('[DEBUG] wheel on .wtHolder', e.deltaY);
-              }, { passive: true });
-              wtHolder.addEventListener('scroll', e => {
-                console.log('[DEBUG] scroll on .wtHolder', e.target.scrollTop);
-              });
-              wtHolder.setAttribute('tabindex', '0');
-              wtHolder.style.pointerEvents = 'auto';
-              wtHolder.style.position = 'relative';
-            }
-            tableWrapper.addEventListener('wheel', e => {
-              console.log('[DEBUG] wheel on .table-wrapper', e.deltaY);
-            }, { passive: true });
-            tableWrapper.addEventListener('scroll', e => {
-              console.log('[DEBUG] scroll on .table-wrapper', e.target.scrollTop);
+          // Вычисляем высоту на основе данных, а не контейнера
+          const rowHeight = 23; // Примерная высота строки в Handsontable
+          const headerHeight = 25; // Высота заголовка
+          const calculatedHeight = Math.max(400, (data.length * rowHeight) + headerHeight + 50); // Минимум 400px
+          
+          setTableHeight(calculatedHeight);
+          
+          // Диагностика
+          const wtHolder = hotInstance.rootElement.querySelector('.ht_master .wtHolder');
+          if (wtHolder) {
+            console.log('[DEBUG] .wtHolder:', {
+              offsetHeight: wtHolder.offsetHeight,
+              clientHeight: wtHolder.clientHeight,
+              scrollHeight: wtHolder.scrollHeight,
+              styleHeight: wtHolder.style.height,
+              overflowY: window.getComputedStyle(wtHolder)['overflow-y'],
+              calculatedHeight: calculatedHeight,
+              dataLength: data.length,
             });
           }
         }
@@ -94,40 +73,19 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
       if (hotTableRef.current && hotTableRef.current.hotInstance) {
         const hotInstance = hotTableRef.current.hotInstance;
         if (hotInstance && hotInstance.rootElement) {
-          const tableWrapper = hotInstance.rootElement.closest('.table-wrapper');
-          if (tableWrapper) {
-            const containerHeight = tableWrapper.clientHeight;
-            
-            // Обновляем состояние высоты
-            setTableHeight(containerHeight);
-            
-            // Обновляем через API
-            try {
-              hotInstance.updateSettings({
-                height: containerHeight,
-                width: '100%'
-              });
-            } catch (error) {
-              console.error('Error updating Handsontable settings on resize:', error);
-            }
-            
-            // Дополнительно устанавливаем напрямую
-            const wtHolder = hotInstance.rootElement.querySelector('.ht_master .wtHolder');
-            if (wtHolder) {
-              wtHolder.style.setProperty('height', `${containerHeight}px`, 'important');
-              wtHolder.style.setProperty('max-height', `${containerHeight}px`, 'important');
-              hotInstance.render();
-              hotInstance.refreshDimensions();
-              console.log(`Resized .wtHolder height to ${containerHeight}px`);
-            }
-          }
+          // Пересчитываем высоту на основе данных
+          const rowHeight = 23;
+          const headerHeight = 25;
+          const calculatedHeight = Math.max(400, (data.length * rowHeight) + headerHeight + 50);
+          
+          setTableHeight(calculatedHeight);
         }
       }
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [data]);
 
   // Загрузка данных
   const loadData = async (showLoader = false) => {
@@ -622,7 +580,8 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
   }
 
   const columns = data.length > 0 ? Object.keys(data[0]).filter(key => key !== '_id') : [];
-
+  console.log('Data length:', data.length);
+  
   // Если нет колонок, показываем сообщение
   if (columns.length === 0) {
     return (
@@ -691,8 +650,8 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
             afterCreateRow={handleAfterCreateRow}
             afterRemoveRow={handleAfterRemoveRow}
             stretchH="all"
-            renderAllRows={false}
-            viewportRowRenderingOffset={10}
+            renderAllRows={true}
+            viewportRowRenderingOffset={50}
             viewportColumnRenderingOffset={5}
             preventOverflow="horizontal"
           />

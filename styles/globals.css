@@ -230,7 +230,8 @@ p {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
+  min-height: 0;
 }
 
 /* Хедер */
@@ -318,17 +319,20 @@ p {
   flex-direction: column;
   min-height: 0;
   position: relative;
+  overflow: auto;
 }
 
 .view {
   display: none;
   width: 100%;
-  height: 100%;
+  min-height: 0;
+  flex-grow: 1;
 }
 
 .view.active {
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 /* Заглушки для видов */
@@ -558,26 +562,21 @@ p {
 }
 
 .table-wrapper {
-  padding: 16px;
   flex-grow: 1;
   display: flex;
   min-height: 0;
+  overflow: auto;
 }
 
-/* === DEBUG: Убираем overlay и pointer-events проблемы === */
+/* === Убираем дебаг стили и лишние правила === */
 .table-container,
 .table-wrapper {
-  padding: 0 !important;
-  margin: 0 !important;
   overflow: visible !important;
-  background: none !important;
-  z-index: auto !important;
 }
 
 .handsontable .ht_master .wtHolder {
   pointer-events: auto !important;
   position: relative !important;
-  outline: 2px solid red !important;
 }
 
 /* Убираем любые стили которые могут скрывать скроллбар */
