@@ -527,6 +527,16 @@ p {
   font-weight: normal;
 }
 
+.unsaved-indicator {
+  color: var(--color-warning);
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  animation: pulse 1.5s infinite;
+}
+
 .table-wrapper {
   flex-grow: 1;
   display: flex;

@@ -20,6 +20,7 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [tableHeight, setTableHeight] = useState(500); // Добавляем состояние для высоты таблицы
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // Индикатор несохраненных изменений
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
   const { getAccessTokenSilently } = useAuth0();
@@ -119,6 +120,12 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
       // Проверяем изменения данных
       const newDataHash = JSON.stringify(rows);
       if (lastModified !== newDataHash) {
+        // Если есть несохраненные изменения, не затираем их
+        if (pendingChanges.current.length > 0) {
+          console.log('Skipping data update - pending changes exist:', pendingChanges.current);
+          return;
+        }
+        
         setData(rows);
         setLastModified(newDataHash);
         setLastUpdateTime(new Date());
@@ -237,54 +244,82 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
     pendingChanges.current = []; // Очищаем очередь
     
     console.log('Flushing changes:', changesToFlush);
+    console.log('Current data state:', data.length, 'rows');
 
     try {
-      // Группируем изменения по строкам - уже не нужно, если каждое изменение - отдельный объект для строки
-      // Вместо этого, итерируемся по каждому изменению в очереди
       for (const change of changesToFlush) {
-        const { rowIndex, data: changeData, rowId } = change; // rowId добавлен для прямого обновления
+        const { rowIndex, rowId, data: changeData } = change;
         
-        let currentRowData = data.find(row => row._id === rowId); // Находим актуальные данные строки по ID
-        if (!currentRowData && rowIndex !== undefined && data[rowIndex]?._id === rowId) {
-           // Фоллбэк на случай, если ID есть, но строка еще не найдена по нему в текущем `data`,
-           // но rowIndex и rowId совпадают с тем, что в `data`
-           currentRowData = data[rowIndex];
+        console.log('Processing change:', { rowIndex, rowId, changeData });
+        
+        // Находим актуальные данные строки по ID
+        const currentRowData = data.find(row => row._id === rowId);
+        
+        if (!currentRowData) {
+          console.warn('Could not find row data for change:', change);
+          console.warn('Available row IDs:', data.map(row => row._id).slice(0, 10), '...');
+          continue;
         }
 
-        if (currentRowData) {
-          const updatePayload = { ...currentRowData, ...changeData, rowId: currentRowData._id };
-          
-          console.log('Sending update to API:', updatePayload);
-          const response = await makeAPIRequest('/api/sheet', {
-            method: 'PUT',
-            body: JSON.stringify(updatePayload)
+        // Создаем payload для API - убираем _id из корня
+        const { _id, ...rowDataWithoutId } = currentRowData;
+        const updatePayload = { 
+          ...rowDataWithoutId, 
+          ...changeData
+          // Убираем rowId из body - будем передавать в URL
+        };
+        
+        console.log('Sending update to API:', {
+          rowId: rowId,
+          payload: updatePayload,
+          originalRowData: currentRowData
+        });
+        
+        const response = await makeAPIRequest(`/api/sheet?rowId=${rowId}`, {
+          method: 'PUT',
+          body: JSON.stringify(updatePayload)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('API Error details:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText,
+            sentPayload: updatePayload,
+            rowId: rowId
           });
-          
-          if (!response.ok) {
-            console.error('Failed to update row:', updatePayload, 'Response:', response);
-            // Важно: если ошибка, изменения могут быть потеряны или нужно их вернуть в очередь
-            // Пока что просто логируем и позволяем loadData() ниже исправить несоответствия
-            throw new Error(`Failed to update row ${currentRowData._id}`);
-          }
-          
-          // Обновляем локальные данные ОПТИМИСТИЧНО или после ответа сервера
-          setData(currentData => {
-            const newData = currentData.map(row => 
-              row._id === currentRowData._id ? { ...row, ...changeData } : row
-            );
-            return newData;
-          });
-          console.log(`Row ${currentRowData._id} updated successfully locally and on server.`);
-        } else {
-          console.warn('Could not find row data for change:', change, 'Current data state:', data);
+          throw new Error(`Failed to update row ${rowId}: ${response.status} ${errorText}`);
         }
+        
+        // Обновляем локальные данные после успешного API вызова
+        setData(currentData => {
+          return currentData.map(row => 
+            row._id === rowId ? { ...row, ...changeData } : row
+          );
+        });
+        
+        console.log(`Row ${rowId} updated successfully locally and on server.`);
       }
       
-      console.log(`Batch of ${changesToFlush.length} changes processed.`);
+      console.log(`Batch of ${changesToFlush.length} changes processed successfully.`);
+      
+      // Сбрасываем индикатор несохраненных изменений если очередь пуста
+      if (pendingChanges.current.length === 0) {
+        setHasUnsavedChanges(false);
+      }
     } catch (err) {
       console.error('Error in batch update:', err);
-      // При ошибке перезагружаем данные, чтобы восстановить консистентность
-      loadData(false); 
+      // При ошибке возвращаем изменения обратно в очередь для повторной попытки
+      pendingChanges.current = [...changesToFlush, ...pendingChanges.current];
+      
+      // Показываем ошибку пользователю
+      setError(`Ошибка сохранения: ${err.message}. Попробуйте еще раз.`);
+      
+      // Перезагружаем данные, чтобы восстановить консистентность
+      setTimeout(() => {
+        loadData(false);
+      }, 2000);
     }
   };
 
@@ -295,13 +330,39 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
     }
 
     if (changes) {
+      console.log('handleAfterChange called with:', { changes, source, dataLength: data.length });
+      
       for (const [row, prop, oldValue, newValue] of changes) {
-        if (oldValue !== newValue) {
-          // Добавляем изменение в очередь
+        if (oldValue !== newValue && data[row]) {
+          // Получаем ID строки из данных
+          const rowId = data[row]._id;
+          
+          console.log('Change details:', {
+            rowIndex: row,
+            rowData: data[row],
+            rowId: rowId,
+            property: prop,
+            oldValue: oldValue,
+            newValue: newValue
+          });
+          
+          if (!rowId) {
+            console.warn('Row ID not found for row index:', row, 'Row data:', data[row]);
+            console.warn('Data structure sample:', data.slice(0, 3));
+            continue;
+          }
+
+          // Добавляем изменение в очередь с ID строки
           pendingChanges.current.push({
             rowIndex: row,
+            rowId: rowId,
             data: { [prop]: newValue }
           });
+          
+          // Устанавливаем индикатор несохраненных изменений
+          setHasUnsavedChanges(true);
+          
+          console.log('Change queued:', { rowIndex: row, rowId, prop, oldValue, newValue });
           
           // Сбрасываем предыдущий таймер
           if (writeTimeoutRef.current) {
@@ -550,6 +611,9 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
         data: fieldsToUpdate
       });
       
+      // Устанавливаем индикатор несохраненных изменений
+      setHasUnsavedChanges(true);
+      
       // Сбрасываем предыдущий таймер, если он был
       if (writeTimeoutRef.current) {
         clearTimeout(writeTimeoutRef.current);
@@ -615,6 +679,11 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          {hasUnsavedChanges && (
+            <div className="unsaved-indicator" title="Есть несохраненные изменения">
+              💾 Сохранение...
+            </div>
+          )}
           <button 
             onClick={() => loadData(false)}
             disabled={isPolling}

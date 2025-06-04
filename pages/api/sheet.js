@@ -21,8 +21,11 @@ export default async function handler(req, res) {
         break;
 
       case 'PUT':
-        const { rowId, ...updateData } = body;
-        const updatedRow = await updateRow(parseInt(rowId), updateData);
+        const { rowId } = query;
+        if (!rowId) {
+          return res.status(400).json({ error: 'rowId is required in query parameters' });
+        }
+        const updatedRow = await updateRow(parseInt(rowId), body);
         res.status(200).json(updatedRow);
         break;
 
