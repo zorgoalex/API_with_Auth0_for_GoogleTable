@@ -564,18 +564,20 @@ p {
   min-height: 0;
 }
 
-.handsontable {
-  width: 100% !important;
-  height: 100% !important;
+/* === DEBUG: Убираем overlay и pointer-events проблемы === */
+.table-container,
+.table-wrapper {
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  background: none !important;
+  z-index: auto !important;
 }
 
-/* Убираем конфликтующие стили, оставляем только базовые настройки overflow */
 .handsontable .ht_master .wtHolder {
-  overflow: auto !important;
-  overflow-y: scroll !important; /* Принудительно показываем вертикальный скролл */
-  overflow-x: auto !important;
-  width: 100% !important;
-  /* height будет устанавливаться через JavaScript в пикселях */
+  pointer-events: auto !important;
+  position: relative !important;
+  outline: 2px solid red !important;
 }
 
 /* Убираем любые стили которые могут скрывать скроллбар */

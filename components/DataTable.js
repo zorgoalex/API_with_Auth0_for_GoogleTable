@@ -41,19 +41,10 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
       const timer = setTimeout(() => {
         const hotInstance = hotTableRef.current?.hotInstance;
         if (hotInstance && hotInstance.rootElement) {
-          console.log('Refreshing Handsontable dimensions...');
-          
-          // Находим родительский контейнер таблицы (.table-wrapper)
           const tableWrapper = hotInstance.rootElement.closest('.table-wrapper');
           if (tableWrapper) {
-            // Получаем реальную высоту контейнера в пикселях
             const containerHeight = tableWrapper.clientHeight;
-            console.log('Table wrapper height:', containerHeight, 'px');
-            
-            // Обновляем состояние высоты таблицы
             setTableHeight(containerHeight);
-            
-            // Пробуем обновить размеры через Handsontable API
             try {
               hotInstance.updateSettings({
                 height: containerHeight,
@@ -63,88 +54,36 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
             } catch (error) {
               console.error('Error updating Handsontable settings:', error);
             }
-            
-            // Дополнительно устанавливаем высоту напрямую
+            // === Диагностика scroll ===
             const wtHolder = hotInstance.rootElement.querySelector('.ht_master .wtHolder');
             if (wtHolder) {
-              console.log('Found .wtHolder, current styles:');
-              console.log('- offsetHeight:', wtHolder.offsetHeight);
-              console.log('- clientHeight:', wtHolder.clientHeight);
-              console.log('- scrollHeight:', wtHolder.scrollHeight);
-              console.log('- style.height:', wtHolder.style.height);
-              
-              // Устанавливаем фиксированную высоту в пикселях
-              wtHolder.style.setProperty('height', `${containerHeight}px`, 'important');
-              wtHolder.style.setProperty('overflow', 'auto', 'important');
-              wtHolder.style.setProperty('max-height', `${containerHeight}px`, 'important');
-              
-              console.log(`Set .wtHolder height to ${containerHeight}px`);
-              
-              // Принудительно перерендериваем Handsontable
-              hotInstance.render();
-              hotInstance.refreshDimensions();
-              
-              // Добавляем обработчик скролла для тестирования
-              const scrollHandler = (e) => {
-                console.log('wtHolder scroll event:', e.target.scrollTop);
-              };
-              wtHolder.removeEventListener('scroll', scrollHandler); // Удаляем предыдущий если есть
-              wtHolder.addEventListener('scroll', scrollHandler);
-              
-              // Проверяем результат после небольшой задержки
-              setTimeout(() => {
-                console.log('After render - .wtHolder styles:');
-                console.log('- offsetHeight:', wtHolder.offsetHeight);
-                console.log('- clientHeight:', wtHolder.clientHeight);
-                console.log('- scrollHeight:', wtHolder.scrollHeight);
-                console.log('- style.height:', wtHolder.style.height);
-                console.log('- computed overflow-y:', window.getComputedStyle(wtHolder)['overflow-y']);
-                console.log('- computed overflow-x:', window.getComputedStyle(wtHolder)['overflow-x']);
-                
-                if (wtHolder.scrollHeight > wtHolder.clientHeight) {
-                  console.log('✅ .wtHolder now has scrollable content!');
-                  
-                  // Тестируем программный скролл
-                  setTimeout(() => {
-                    console.log('Testing programmatic scroll...');
-                    wtHolder.scrollTop = 100;
-                    setTimeout(() => {
-                      console.log('After programmatic scroll, scrollTop:', wtHolder.scrollTop);
-                    }, 100);
-                  }, 500);
-                  
-                } else {
-                  console.log('❌ wtHolder still not scrollable. Trying alternative approach...');
-                  
-                  // Альтернативный подход - устанавливаем фиксированную высоту строк
-                  try {
-                    const rowCount = data.length;
-                    const visibleRows = Math.floor(containerHeight / 23); // Примерная высота строки
-                    console.log(`Total rows: ${rowCount}, visible rows: ${visibleRows}`);
-                    
-                    if (rowCount > visibleRows) {
-                      hotInstance.updateSettings({
-                        height: containerHeight,
-                        renderAllRows: false,
-                        viewportRowRenderingOffset: 10
-                      });
-                      console.log('Applied virtualization settings');
-                    }
-                  } catch (err) {
-                    console.error('Error applying virtualization:', err);
-                  }
-                }
-              }, 100);
-              
-            } else {
-              console.warn('.wtHolder not found');
+              console.log('[DEBUG] .wtHolder:', {
+                offsetHeight: wtHolder.offsetHeight,
+                clientHeight: wtHolder.clientHeight,
+                scrollHeight: wtHolder.scrollHeight,
+                styleHeight: wtHolder.style.height,
+                overflowY: window.getComputedStyle(wtHolder)['overflow-y'],
+              });
+              // Вешаем обработчики событий
+              wtHolder.addEventListener('wheel', e => {
+                console.log('[DEBUG] wheel on .wtHolder', e.deltaY);
+              }, { passive: true });
+              wtHolder.addEventListener('scroll', e => {
+                console.log('[DEBUG] scroll on .wtHolder', e.target.scrollTop);
+              });
+              wtHolder.setAttribute('tabindex', '0');
+              wtHolder.style.pointerEvents = 'auto';
+              wtHolder.style.position = 'relative';
             }
-          } else {
-            console.warn('.table-wrapper not found');
+            tableWrapper.addEventListener('wheel', e => {
+              console.log('[DEBUG] wheel on .table-wrapper', e.deltaY);
+            }, { passive: true });
+            tableWrapper.addEventListener('scroll', e => {
+              console.log('[DEBUG] scroll on .table-wrapper', e.target.scrollTop);
+            });
           }
         }
       }, 100);
-      
       return () => clearTimeout(timer);
     }
   }, [data, loading]);
