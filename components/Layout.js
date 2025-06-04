@@ -37,7 +37,7 @@ export default function Layout({ isAuthenticated, user }) {
   const { logout } = useAuth0();
   const [currentView, setCurrentView] = useState('table');
   const [sidebarOpen, setSidebarOpen] = useState(false); // для мобильных
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // для десктопа
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // для десктопа - по умолчанию свернут
   const [generatedDays, setGeneratedDays] = useState([]);
   const [allOrders, setAllOrders] = useState([]); // <--- Новое состояние для заказов
   const dataTableRef = useRef(null); // <--- Ref для DataTable
