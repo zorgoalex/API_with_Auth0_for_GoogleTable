@@ -101,15 +101,6 @@ html, body {
   overflow-y: hidden;
 }
 
-/* Это правило может понадобиться, если Next.js оборачивает <App> в дополнительные div */
-/* Если у вас есть <div id="__next">, и он не 100% высоты, раскомментируйте: */
-/*
-body > div:first-child,
-body > div:first-child > div:first-child {
-  height: 100%;
-}
-*/
-
 h1, h2, h3, h4, h5, h6 {
   margin: 0;
   font-weight: var(--font-weight-semibold);
@@ -320,6 +311,7 @@ p {
   min-height: 0;
   position: relative;
   overflow: auto;
+  margin-bottom: var(--space-16);
 }
 
 .view {
@@ -333,6 +325,36 @@ p {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* Подвал */
+.footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  padding: var(--space-12) var(--space-24);
+}
+
+.footer__content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 100%;
+}
+
+.footer__text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.footer__version {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-family: 'Courier New', monospace;
+  background: var(--color-secondary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
 }
 
 /* Заглушки для видов */
@@ -443,63 +465,7 @@ p {
   box-shadow: var(--shadow-md);
 }
 
-/* Адаптивность */
-@media (max-width: 768px) {
-  .sidebar {
-    position: fixed;
-    left: -280px;
-    z-index: 1000;
-    height: 100vh;
-    transition: left var(--duration-normal) var(--ease-standard);
-  }
-  
-  .sidebar.open {
-    left: 0;
-  }
-  
-  .main-content {
-    width: 100%;
-  }
-  
-  .header {
-    padding: var(--space-12) var(--space-16);
-  }
-  
-  .header__title {
-    font-size: var(--font-size-xl);
-  }
-  
-  .user-name {
-    display: none;
-  }
-  
-  .content {
-    padding: var(--space-16);
-  }
-}
-
-/* Анимации */
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.2);
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* Стили для таблицы - сохраняем существующие стили для Handsontable */
+/* Стили для таблицы */
 .table-container {
   flex-grow: 1;
   display: flex;
@@ -568,7 +534,7 @@ p {
   overflow: auto;
 }
 
-/* === Убираем дебаг стили и лишние правила === */
+/* Стили для Handsontable */
 .table-container,
 .table-wrapper {
   overflow: visible !important;
@@ -579,7 +545,6 @@ p {
   position: relative !important;
 }
 
-/* Убираем любые стили которые могут скрывать скроллбар */
 .handsontable .ht_master .wtHolder::-webkit-scrollbar {
   width: 12px !important;
   height: 12px !important;
@@ -603,7 +568,6 @@ p {
   height: 100% !important;
 }
 
-/* Убираем принудительные стили высоты для внутренних элементов */
 .handsontable .ht_master .wtHolder .wtHider {
   position: relative !important;
   min-height: 100% !important;
@@ -614,7 +578,6 @@ p {
   min-height: 100% !important;
 }
 
-/* Дополнительные правила для корректной работы скролла */
 .handsontable .ht_master .wtHolder .wtHider .htCore tbody {
   min-height: inherit;
 }
@@ -668,4 +631,70 @@ p {
   border: 1px solid rgba(var(--color-error), 0.2);
   border-radius: var(--radius-base);
   margin: 1rem 0;
+}
+
+/* Анимации */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    left: -280px;
+    z-index: 1000;
+    height: 100vh;
+    transition: left var(--duration-normal) var(--ease-standard);
+  }
+  
+  .sidebar.open {
+    left: 0;
+  }
+  
+  .main-content {
+    width: 100%;
+  }
+  
+  .header {
+    padding: var(--space-12) var(--space-16);
+  }
+  
+  .header__title {
+    font-size: var(--font-size-xl);
+  }
+  
+  .user-name {
+    display: none;
+  }
+  
+  .content {
+    padding: var(--space-16);
+  }
+
+  .footer {
+    padding: var(--space-8) var(--space-16);
+  }
+
+  .footer__content {
+    flex-direction: column;
+    gap: var(--space-4);
+    text-align: center;
+  }
 } 

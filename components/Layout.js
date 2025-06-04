@@ -245,6 +245,18 @@ export default function Layout({ isAuthenticated, user }) {
             </div>
           </div>
         </div>
+
+        {/* Подвал */}
+        <footer className="footer">
+          <div className="footer__content">
+            <div className="footer__text">
+              Google Table Hub © 2024
+            </div>
+            <div className="footer__version">
+              v1.0.0
+            </div>
+          </div>
+        </footer>
       </main>
     </div>
   );
