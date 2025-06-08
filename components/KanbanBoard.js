@@ -61,18 +61,21 @@ function capitalizeFirst(str) {
 }
 
 export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdate }) {
-  const [containerWidth, setContainerWidth] = useState(1200); // Начальное значение
-  const [columnsCount, setColumnsCount] = useState(4); // Уменьшаем начальное значение
+  const [containerWidth, setContainerWidth] = useState(1200);
   const containerRef = useRef(null);
   const columnRefs = useRef({});
   
   const ordersMap = groupOrdersByDate(orders);
 
-  // Константы для масштабирования
-  const MAX_COLUMNS = 7;
-  const MIN_COLUMNS = 1;
-  const COLUMN_WIDTH = 260;
+  // Константы для адаптивного дизайна
+  const DESKTOP_COLUMN_WIDTH = 260;
+  const MOBILE_MIN_COLUMN_WIDTH = 140;
+  const MOBILE_MAX_COLUMN_WIDTH = 160;
   const COLUMN_GAP = 16;
+  const CONTAINER_PADDING = 32; // padding слева и справа
+
+  // Детекция мобильных устройств
+  const isMobile = containerWidth <= 768;
 
   // Отслеживаем размер контейнера
   useEffect(() => {
@@ -85,7 +88,6 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
     const resizeObserver = new ResizeObserver(entries => {
       if (entries[0]) {
         const width = entries[0].contentRect.width;
-        console.log('Container width updated:', width);
         setContainerWidth(width);
       }
     });
@@ -97,17 +99,32 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
     return () => resizeObserver.disconnect();
   }, []);
 
-  // Вычисляем количество колонок на основе ширины контейнера
-  const maxColumnsPerRow = Math.max(1, Math.floor((containerWidth - 32) / (COLUMN_WIDTH + COLUMN_GAP))); // Учитываем padding
-  const actualColumnsPerRow = Math.min(maxColumnsPerRow, columnsCount);
-  
-  console.log('Debug info:', {
-    containerWidth,
-    maxColumnsPerRow,
-    columnsCount,
-    actualColumnsPerRow,
-    daysLength: days.length
-  });
+  // Автоматическое вычисление размеров колонок и их количества
+  const { columnWidth, actualColumnsPerRow } = useMemo(() => {
+    const availableWidth = containerWidth - CONTAINER_PADDING;
+    
+    if (isMobile) {
+      // Для мобильных устройств
+      if (availableWidth <= 320) {
+        // Очень узкие экраны - 2 колонки минимальной ширины
+        const cols = 2;
+        const width = Math.max(MOBILE_MIN_COLUMN_WIDTH, 
+          (availableWidth - (cols - 1) * COLUMN_GAP) / cols);
+        return { columnWidth: width, actualColumnsPerRow: cols };
+      } else {
+        // Более широкие мобильные экраны - автоматический расчет
+        let cols = Math.floor((availableWidth + COLUMN_GAP) / (MOBILE_MIN_COLUMN_WIDTH + COLUMN_GAP));
+        cols = Math.max(2, Math.min(cols, 3)); // от 2 до 3 колонок на мобильных
+        const width = Math.min(MOBILE_MAX_COLUMN_WIDTH, 
+          (availableWidth - (cols - 1) * COLUMN_GAP) / cols);
+        return { columnWidth: width, actualColumnsPerRow: cols };
+      }
+    } else {
+      // Для десктопа и планшетов - используем фиксированную ширину
+      const cols = Math.max(1, Math.floor((availableWidth + COLUMN_GAP) / (DESKTOP_COLUMN_WIDTH + COLUMN_GAP)));
+      return { columnWidth: DESKTOP_COLUMN_WIDTH, actualColumnsPerRow: cols };
+    }
+  }, [containerWidth, isMobile]);
 
   // Группируем дни по рядам
   const dayRows = useMemo(() => {
@@ -117,19 +134,11 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
     for (let i = 0; i < days.length; i += actualColumnsPerRow) {
       rows.push(days.slice(i, i + actualColumnsPerRow));
     }
-    console.log('Day rows:', rows.map(row => row.length));
     return rows;
   }, [days, actualColumnsPerRow]);
 
 
 
-  const handleZoomOut = () => {
-    setColumnsCount(prev => Math.min(prev + 1, MAX_COLUMNS));
-  };
-
-  const handleZoomIn = () => {
-    setColumnsCount(prev => Math.max(prev - 1, MIN_COLUMNS));
-  };
 
   const handleCheckboxChange = (order, isChecked) => {
     if (!onOrderStatusUpdate) return;
@@ -152,52 +161,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
       }}
       className="kanban-board-container"
     >
-      {/* Панель управления масштабом */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 16,
-        padding: '8px 12px',
-        background: 'var(--color-surface)',
-        borderRadius: 8,
-        boxShadow: 'var(--shadow-sm)',
-      }}>
-        <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)' }}>
-          Масштаб:
-        </span>
-        <button
-          onClick={handleZoomIn}
-          disabled={columnsCount <= MIN_COLUMNS}
-          style={{
-            padding: '4px 8px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 4,
-            background: columnsCount <= MIN_COLUMNS ? '#f5f5f5' : 'var(--color-surface)',
-            cursor: columnsCount <= MIN_COLUMNS ? 'not-allowed' : 'pointer',
-            fontSize: 12,
-          }}
-        >
-          +
-        </button>
-        <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-          {actualColumnsPerRow} из {days.length} ({dayRows.length} рядов)
-        </span>
-        <button
-          onClick={handleZoomOut}
-          disabled={columnsCount >= MAX_COLUMNS}
-          style={{
-            padding: '4px 8px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 4,
-            background: columnsCount >= MAX_COLUMNS ? '#f5f5f5' : 'var(--color-surface)',
-            cursor: columnsCount >= MAX_COLUMNS ? 'not-allowed' : 'pointer',
-            fontSize: 12,
-          }}
-        >
-          −
-        </button>
-      </div>
+
 
       {/* Многорядная сетка дней */}
       <div
@@ -222,9 +186,13 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
               key={rowIndex}
               style={{
                 display: 'grid',
-                gridTemplateColumns: `repeat(${row.length}, ${COLUMN_WIDTH}px)`,
+                gridTemplateColumns: `repeat(${row.length}, ${columnWidth}px)`,
+                gridTemplateRows: '1fr',
                 gap: COLUMN_GAP,
-                alignItems: 'start',
+                alignItems: 'stretch',
+                justifyContent: 'flex-start',
+                paddingBottom: rowIndex < dayRows.length - 1 ? 8 : 0,
+                borderBottom: rowIndex < dayRows.length - 1 ? '5px solid #e0e0e0' : 'none',
               }}
             >
               {row.map((day, colIndex) => {
@@ -240,44 +208,47 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                     ref={el => columnRefs.current[key] = el}
                     style={{
                       background: allCompleted ? '#e8f5e8' : 'var(--color-surface)',
-                      borderRadius: 10,
+                      borderRadius: isMobile ? 8 : 10,
                       boxShadow: 'var(--shadow-md)',
-                      padding: 12,
-                      minHeight: 120,
-                      height: 'fit-content',
+                      padding: isMobile ? 8 : 12,
+                      minHeight: isMobile ? 100 : 120,
                       border: allCompleted ? '2px solid #4caf50' : '1px solid #bfc3c9',
                       display: 'flex',
                       flexDirection: 'column',
+                      fontSize: isMobile ? 12 : 14,
                     }}
                   >
                     {/* Заголовок дня */}
-                    <div style={{ marginBottom: 8, fontWeight: 500, fontSize: 16 }}>
-                      <span style={{ 
-                        fontWeight: 700, 
-                        color: allCompleted ? '#2e7d32' : '#000' 
-                      }}>
-                        {capitalizeFirst(getDayName(day))}
-                      </span>
-                      <span style={{ 
-                        marginLeft: 4, 
-                        color: allCompleted ? '#2e7d32' : '#000' 
-                      }}>
-                        ({key})
-                      </span>
+                    <div style={{ 
+                      marginBottom: isMobile ? 6 : 8, 
+                      fontWeight: 500, 
+                      fontSize: isMobile ? 13 : 16,
+                      lineHeight: isMobile ? 1.2 : 1.5,
+                    }}>
+                      <div style={{ marginBottom: isMobile ? 2 : 0 }}>
+                        <span style={{ 
+                          fontWeight: 700, 
+                          color: allCompleted ? '#2e7d32' : '#000' 
+                        }}>
+                          {capitalizeFirst(getDayName(day))}
+                        </span>
+                        <span style={{ 
+                          marginLeft: 4, 
+                          color: allCompleted ? '#2e7d32' : '#000',
+                          fontSize: isMobile ? 11 : 'inherit'
+                        }}>
+                          ({key})
+                        </span>
+                      </div>
                       {dayOrders.length > 0 && (
-                        <>
-                          <span style={{ 
-                            margin: '0 6px', 
-                            color: allCompleted ? '#2e7d32' : '#000' 
-                          }}>—</span>
+                        <div style={{ fontSize: isMobile ? 12 : 16 }}>
                           <span style={{ 
                             color: allCompleted ? '#2e7d32' : '#b36b00', 
-                            fontWeight: 700, 
-                            fontSize: 16 
+                            fontWeight: 700
                           }}>
                             {getTotalArea(dayOrders).toFixed(2)} кв.м.
                           </span>
-                        </>
+                        </div>
                       )}
                     </div>
 
@@ -288,16 +259,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                       gap: 8,
                       flexGrow: 1,
                     }}>
-                      {dayOrders.length === 0 ? (
-                        <div style={{ 
-                          color: 'var(--color-text-secondary)', 
-                          fontSize: 13,
-                          textAlign: 'center',
-                          padding: '20px 0',
-                        }}>
-                          Нет заказов
-                        </div>
-                      ) : dayOrders.map(order => {
+                      {dayOrders.map(order => {
                         const isIssued = String(order["Статус"] ?? '').toLowerCase() === 'выдан';
                         const isReady = String(order["Статус"] ?? '').toLowerCase() === 'готов';
                         
@@ -306,15 +268,15 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                             key={order._id || order["Номер заказа"] || Math.random()}
                             style={{
                               border: isReady ? '2px solid #4caf50' : '1px solid var(--color-card-border)',
-                              borderRadius: 7,
+                              borderRadius: isMobile ? 5 : 7,
                               background: getStatusColor(order["Статус"]),
                               color: 'var(--color-text)',
                               boxShadow: 'var(--shadow-xs)',
-                              padding: 10,
-                              fontSize: 14,
+                              padding: isMobile ? 6 : 10,
+                              fontSize: isMobile ? 11 : 14,
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: 4,
+                              gap: isMobile ? 3 : 4,
                               position: 'relative',
                               transition: 'all 0.2s ease',
                             }}
@@ -333,9 +295,9 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                                 onChange={(e) => handleCheckboxChange(order, e.target.checked)}
                                 onClick={(e) => e.stopPropagation()}
                                 style={{
-                                  width: 10,
-                                  height: 10,
-                                  marginRight: 8,
+                                  width: isMobile ? 12 : 10,
+                                  height: isMobile ? 12 : 10,
+                                  marginRight: isMobile ? 6 : 8,
                                   cursor: 'pointer',
                                   accentColor: '#1976d2'
                                 }}
@@ -346,7 +308,8 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                               <span style={{ 
                                 fontWeight: 700, 
                                 color: '#1976d2', 
-                                fontSize: 18 
+                                fontSize: isMobile ? 14 : 18,
+                                lineHeight: 1
                               }}>
                                 {order["Номер заказа"] || ''}
                               </span>
@@ -392,13 +355,21 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                             </div>
 
                             {/* Детали заказа */}
-                            <div style={{ fontSize: 11, marginBottom: 2 }}>
+                            <div style={{ 
+                              fontSize: isMobile ? 10 : 11, 
+                              marginBottom: 2,
+                              lineHeight: 1.2
+                            }}>
                               {order["Фрезеровка"] ? `. ${order["Фрезеровка"]}` : ''}
                               {order["Площадь заказа"] ? ` – ${String(order["Площадь заказа"]).replace(',', '.')} кв.м.` : ''}
                             </div>
                             
                             {/* Дополнительная информация */}
-                            <div style={{ fontSize: 12, color: '#888' }}>
+                            <div style={{ 
+                              fontSize: isMobile ? 9 : 12, 
+                              color: '#888',
+                              lineHeight: 1.2
+                            }}>
                               {order["Планируемая дата выдачи"] ? `${order["Планируемая дата выдачи"]} • ` : ''}
                               {order["Клиент"] || ''}
                               {order["Оплата"] ? ` • ${order["Оплата"]}` : ''}
