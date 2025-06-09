@@ -207,7 +207,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                     key={key}
                     ref={el => columnRefs.current[key] = el}
                     style={{
-                      background: allCompleted ? '#e8f5e8' : '#f5f5f5',
+                      background: allCompleted ? '#f8fcf8' : '#fcfcfc',
                       borderRadius: isMobile ? 8 : 10,
                       boxShadow: 'var(--shadow-md)',
                       padding: isMobile ? 8 : 12,
