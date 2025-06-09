@@ -359,8 +359,8 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                                     {String(order["Материал"]).split(',').map((mat, idx, arr) => {
                                        const m = mat.trim().toLowerCase();
                                        let bg = '#e0e0e0';
-                                       if (m.includes('18')) bg = '#fff2e6';
-                                       else if (m.includes('16')) bg = '#f0f0f0';
+                                       if (m.includes('18')) bg = '#fff3cd';
+                                       else if (m.includes('16')) bg = '#ffeaa7';
                                        else if (m.includes('10')) bg = '#90caf9';
                                        else if (m.includes('8')) bg = '#c8e6c9';
                                        else if (m.includes('лдсп')) bg = '#ce93d8';
