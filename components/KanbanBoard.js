@@ -207,7 +207,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                     key={key}
                     ref={el => columnRefs.current[key] = el}
                     style={{
-                      background: allCompleted ? '#e8f5e8' : 'var(--color-surface)',
+                      background: allCompleted ? '#e8f5e8' : '#f5f5f5',
                       borderRadius: isMobile ? 8 : 10,
                       boxShadow: 'var(--shadow-md)',
                       padding: isMobile ? 8 : 12,
@@ -224,8 +224,14 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                       fontWeight: 500, 
                       fontSize: isMobile ? 13 : 16,
                       lineHeight: isMobile ? 1.2 : 1.5,
+                      display: 'flex',
+                      flexDirection: isMobile ? 'column' : 'row',
+                      alignItems: isMobile ? 'flex-start' : 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: isMobile ? 2 : 8
                     }}>
-                      <div style={{ marginBottom: isMobile ? 2 : 0 }}>
+                      <div>
                         <span style={{ 
                           fontWeight: 700, 
                           color: allCompleted ? '#2e7d32' : '#000' 
@@ -235,7 +241,8 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                         <span style={{ 
                           marginLeft: 4, 
                           color: allCompleted ? '#2e7d32' : '#000',
-                          fontSize: isMobile ? 11 : 'inherit'
+                          fontSize: isMobile ? 11 : 'inherit',
+                          fontWeight: 'normal'
                         }}>
                           ({key})
                         </span>
@@ -243,7 +250,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                       {dayOrders.length > 0 && (
                         <div style={{ fontSize: isMobile ? 12 : 16 }}>
                           <span style={{ 
-                            color: allCompleted ? '#2e7d32' : '#b36b00', 
+                            color: allCompleted ? '#1b5e20' : '#e65100', 
                             fontWeight: 700
                           }}>
                             {getTotalArea(dayOrders).toFixed(2)} кв.м.
@@ -267,12 +274,12 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                           <div
                             key={order._id || order["Номер заказа"] || Math.random()}
                             style={{
-                              border: isReady ? '2px solid #4caf50' : '1px solid var(--color-card-border)',
+                              border: isReady ? '2px solid #4caf50' : '1px solid #c0c0c0',
                               borderRadius: isMobile ? 5 : 7,
-                              background: getStatusColor(order["Статус"]),
+                              background: isIssued ? '#f8f9fa' : '#ffffff',
                               color: 'var(--color-text)',
                               boxShadow: 'var(--shadow-xs)',
-                              padding: isMobile ? 6 : 10,
+                              padding: `${isMobile ? 8 : 13}px ${isMobile ? 6 : 10}px`,
                               fontSize: isMobile ? 11 : 14,
                               display: 'flex',
                               flexDirection: 'column',
@@ -287,78 +294,94 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                               gap: 4, 
                               marginBottom: 2,
                               flexWrap: 'wrap',
+                              justifyContent: 'space-between'
                             }}>
-                              {/* Чекбокс */}
-                              <input
-                                type="checkbox"
-                                checked={isIssued}
-                                onChange={(e) => handleCheckboxChange(order, e.target.checked)}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{
-                                  width: isMobile ? 12 : 10,
-                                  height: isMobile ? 12 : 10,
-                                  marginRight: isMobile ? 6 : 8,
-                                  cursor: 'pointer',
-                                  accentColor: '#1976d2'
-                                }}
-                                title={isIssued ? "Снять отметку о выдаче (статус изменится на '-')" : "Отметить как выданный"}
-                              />
-                              
-                              {/* Номер заказа */}
-                              <span style={{ 
-                                fontWeight: 700, 
-                                color: '#1976d2', 
-                                fontSize: isMobile ? 14 : 18,
-                                lineHeight: 1
-                              }}>
-                                {order["Номер заказа"] || ''}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                                {/* Чекбокс */}
+                                <input
+                                  type="checkbox"
+                                  checked={isIssued}
+                                  onChange={(e) => handleCheckboxChange(order, e.target.checked)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    width: isMobile ? 12 : 10,
+                                    height: isMobile ? 12 : 10,
+                                    marginRight: isMobile ? 6 : 8,
+                                    cursor: 'pointer',
+                                    accentColor: '#1976d2'
+                                  }}
+                                  title={isIssued ? "Снять отметку о выдаче (статус изменится на '-')" : "Отметить как выданный"}
+                                />
+                                
+                                {/* Номер заказа */}
+                                <span style={{ 
+                                  fontWeight: 700, 
+                                  color: '#1976d2', 
+                                  fontSize: isMobile ? 14 : 18,
+                                  lineHeight: 1
+                                }}>
+                                  {order["Номер заказа"] || ''}
+                                  {order["Номер заказа присадки"] && (
+                                    <span style={{ 
+                                      color: '#d32f2f', 
+                                      fontWeight: 700,
+                                      fontSize: isMobile ? 14 : 18
+                                    }}>
+                                      -{order["Номер заказа присадки"]}
+                                    </span>
+                                  )}
+                                </span>
+
+                                {/* Отрисован */}
+                                {(() => {
+                                  const ot = String(order["Отрисован"] ?? '').toLowerCase();
+                                  return (ot.includes('отрис') || ot.includes('cad')) && (
+                                    <span style={{ 
+                                      color: '#1976d2', 
+                                      fontWeight: 700, 
+                                      fontSize: 22, 
+                                      marginLeft: 4, 
+                                      lineHeight: 1 
+                                    }}>
+                                      О
+                                    </span>
+                                  );
+                                })()}
+                              </div>
 
                               {/* Материалы */}
-                              {order["Материал"] && String(order["Материал"]).split(',').map((mat, idx, arr) => {
-                                const m = mat.trim().toLowerCase();
-                                let bg = '#f5f5f5';
-                                if (m.includes('18')) bg = '#fff3e0';
-                                else if (m.includes('10')) bg = '#e3f2fd';
-                                else if (m.includes('лдсп')) bg = '#f3e6ff';
-                                return (
-                                  <span key={idx} style={{
-                                    background: bg,
-                                    color: '#b23c17',
-                                    fontStyle: 'italic',
-                                    fontWeight: 400,
-                                    fontSize: 11,
-                                    padding: '1px 7px',
-                                    borderRadius: 6,
-                                    marginRight: idx !== arr.length - 1 ? 4 : 0
-                                  }}>
-                                    {mat.trim()}
-                                  </span>
-                                );
-                              })}
-
-                              {/* Отрисован */}
-                              {(() => {
-                                const ot = String(order["Отрисован"] ?? '').toLowerCase();
-                                return (ot.includes('отрис') || ot.includes('cad')) && (
-                                  <span style={{ 
-                                    color: '#1976d2', 
-                                    fontWeight: 700, 
-                                    fontSize: 22, 
-                                    marginLeft: 4, 
-                                    lineHeight: 1 
-                                  }}>
-                                    О
-                                  </span>
-                                );
-                              })()}
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                {order["Материал"] && String(order["Материал"]).trim() !== "16мм" && String(order["Материал"]).split(',').map((mat, idx, arr) => {
+                                                                     const m = mat.trim().toLowerCase();
+                                   let bg = '#e0e0e0';
+                                   if (m.includes('18')) bg = '#fff2e6';
+                                   else if (m.includes('16')) bg = '#f0f0f0';
+                                   else if (m.includes('10')) bg = '#90caf9';
+                                   else if (m.includes('8')) bg = '#c8e6c9';
+                                   else if (m.includes('лдсп')) bg = '#ce93d8';
+                                  return (
+                                                                         <span key={idx} style={{
+                                       background: bg,
+                                       color: '#8b0000',
+                                       fontStyle: 'italic',
+                                       fontWeight: 300,
+                                       fontSize: 13,
+                                       padding: '1px 7px',
+                                       borderRadius: 6
+                                     }}>
+                                       {mat.trim()}
+                                     </span>
+                                  );
+                                })}
+                              </div>
                             </div>
 
                             {/* Детали заказа */}
                             <div style={{ 
-                              fontSize: isMobile ? 10 : 11, 
+                              fontSize: isMobile ? 12 : 13, 
                               marginBottom: 2,
-                              lineHeight: 1.2
+                              lineHeight: 1.2,
+                              color: '#000'
                             }}>
                               {order["Фрезеровка"] ? `. ${order["Фрезеровка"]}` : ''}
                               {order["Площадь заказа"] ? ` – ${String(order["Площадь заказа"]).replace(',', '.')} кв.м.` : ''}
