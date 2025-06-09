@@ -69,8 +69,8 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
 
   // Константы для адаптивного дизайна
   const DESKTOP_COLUMN_WIDTH = 260;
-  const MOBILE_MIN_COLUMN_WIDTH = 140;
-  const MOBILE_MAX_COLUMN_WIDTH = 160;
+  const MOBILE_MIN_COLUMN_WIDTH = 126;
+  const MOBILE_MAX_COLUMN_WIDTH = 144;
   const COLUMN_GAP = 16;
   const CONTAINER_PADDING = 32; // padding слева и справа
 
@@ -279,11 +279,11 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                               background: isIssued ? '#f8f9fa' : '#ffffff',
                               color: 'var(--color-text)',
                               boxShadow: 'var(--shadow-xs)',
-                              padding: `${isMobile ? 8 : 13}px ${isMobile ? 6 : 10}px`,
+                              padding: `${isMobile ? 10 : 16}px ${isMobile ? 6 : 10}px`,
                               fontSize: isMobile ? 11 : 14,
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: isMobile ? 3 : 4,
+                              gap: isMobile ? 4 : 5,
                               position: 'relative',
                               transition: 'all 0.2s ease',
                             }}
@@ -352,7 +352,13 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                               </div>
 
                                                             {/* Материалы и CAD файлы */}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                              <div style={{ 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                alignItems: 'flex-end',
+                                gap: 2,
+                                marginTop: -6
+                              }}>
                                 {/* Материалы */}
                                 {order["Материал"] && String(order["Материал"]).trim() !== "16мм" && (
                                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
