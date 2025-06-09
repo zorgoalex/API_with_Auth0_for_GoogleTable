@@ -276,7 +276,12 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                             style={{
                               border: isReady ? '2px solid #4caf50' : '1px solid #c0c0c0',
                               borderRadius: isMobile ? 5 : 7,
-                              background: isIssued ? '#f8f9fa' : '#ffffff',
+                              background: (() => {
+                                if (String(order["Номер заказа"] || '').startsWith('К')) {
+                                  return isIssued ? '#f5f0e6' : '#faf7f0';
+                                }
+                                return isIssued ? '#f8f9fa' : '#ffffff';
+                              })(),
                               color: 'var(--color-text)',
                               boxShadow: 'var(--shadow-xs)',
                               padding: `${isMobile ? 10 : 16}px ${isMobile ? 6 : 10}px`,
@@ -316,7 +321,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                                 {/* Номер заказа */}
                                 <span style={{ 
                                   fontWeight: 700, 
-                                  color: '#1976d2', 
+                                  color: String(order["Номер заказа"] || '').startsWith('К') ? '#8B4513' : '#1976d2', 
                                   fontSize: isMobile ? 14 : 18,
                                   lineHeight: 1
                                 }}>
