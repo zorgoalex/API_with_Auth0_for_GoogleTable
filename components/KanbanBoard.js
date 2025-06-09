@@ -347,32 +347,58 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                                     </span>
                                   );
                                 })()}
+
+
                               </div>
 
-                              {/* Материалы */}
-                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                {order["Материал"] && String(order["Материал"]).trim() !== "16мм" && String(order["Материал"]).split(',').map((mat, idx, arr) => {
-                                                                     const m = mat.trim().toLowerCase();
-                                   let bg = '#e0e0e0';
-                                   if (m.includes('18')) bg = '#fff2e6';
-                                   else if (m.includes('16')) bg = '#f0f0f0';
-                                   else if (m.includes('10')) bg = '#90caf9';
-                                   else if (m.includes('8')) bg = '#c8e6c9';
-                                   else if (m.includes('лдсп')) bg = '#ce93d8';
-                                  return (
-                                                                         <span key={idx} style={{
-                                       background: bg,
-                                       color: '#8b0000',
-                                       fontStyle: 'italic',
-                                       fontWeight: 300,
-                                       fontSize: 13,
-                                       padding: '1px 7px',
-                                       borderRadius: 6
-                                     }}>
-                                       {mat.trim()}
-                                     </span>
+                                                            {/* Материалы и CAD файлы */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                                {/* Материалы */}
+                                {order["Материал"] && String(order["Материал"]).trim() !== "16мм" && (
+                                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                    {String(order["Материал"]).split(',').map((mat, idx, arr) => {
+                                       const m = mat.trim().toLowerCase();
+                                       let bg = '#e0e0e0';
+                                       if (m.includes('18')) bg = '#fff2e6';
+                                       else if (m.includes('16')) bg = '#f0f0f0';
+                                       else if (m.includes('10')) bg = '#90caf9';
+                                       else if (m.includes('8')) bg = '#c8e6c9';
+                                       else if (m.includes('лдсп')) bg = '#ce93d8';
+                                      return (
+                                         <span key={idx} style={{
+                                           background: bg,
+                                           color: '#8b0000',
+                                           fontStyle: 'italic',
+                                           fontWeight: 300,
+                                           fontSize: 13,
+                                           padding: '1px 7px',
+                                           borderRadius: 6
+                                         }}>
+                                           {mat.trim()}
+                                         </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                
+                                {/* CAD файлы - контурный карандашик */}
+                                {(() => {
+                                  const cadFiles = String(order["CAD файлы"] ?? '').toLowerCase();
+                                  return cadFiles.includes('отрисован') && (
+                                    <span style={{ 
+                                      color: 'transparent',
+                                      WebkitTextStroke: '1px #5e72e4',
+                                      textStroke: '1px #5e72e4',
+                                      fontSize: 22, 
+                                      lineHeight: 1,
+                                      fontWeight: 400,
+                                      transform: 'scaleX(-1) scaleY(1.15) rotate(5deg)',
+                                      display: 'inline-block'
+                                    }}>
+                                      ✎
+                                    </span>
                                   );
-                                })}
+                                })()}
                               </div>
                             </div>
 
