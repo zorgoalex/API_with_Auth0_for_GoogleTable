@@ -65,7 +65,7 @@ function initializeDays(orders = []) {
 
 export default function Layout({ isAuthenticated, user }) {
   const { logout } = useAuth0();
-  const [currentView, setCurrentView] = useState('table');
+  const [currentView, setCurrentView] = useState('kanban');
   const [sidebarOpen, setSidebarOpen] = useState(false); // для мобильных
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // для десктопа - по умолчанию свернут
   const [generatedDays, setGeneratedDays] = useState([]);
