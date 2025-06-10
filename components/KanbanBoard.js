@@ -67,32 +67,78 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
   const [optimisticOrders, setOptimisticOrders] = useState([]); // Локальная копия заказов для оптимистичных обновлений
   const [pendingMoves, setPendingMoves] = useState(new Set()); // Отслеживание заказов в процессе перемещения
   const [notification, setNotification] = useState(null); // Уведомления об ошибках
+  const [isDragActive, setIsDragActive] = useState(false); // Флаг активного перетаскивания
   const containerRef = useRef(null);
   const columnRefs = useRef({});
   
-  // Используем оптимистичные заказы, если они есть, иначе исходные
-  const currentOrders = optimisticOrders.length > 0 ? optimisticOrders : orders;
+  // Умная логика выбора данных для отображения 
+  const currentOrders = useMemo(() => {
+    // Во время активного drag - используем оптимистичные
+    if (isDragActive && optimisticOrders.length > 0) {
+      return optimisticOrders;
+    }
+    
+    // В остальных случаях используем реальные orders с переопределением pending элементов
+    if (pendingMoves.size === 0) {
+      return orders;
+    }
+    
+    // Если есть pending операции, используем реальные orders но с подменой pending элементов из optimistic
+    return orders.map(order => {
+      const orderId = order._id || order["Номер заказа"];
+      if (pendingMoves.has(orderId)) {
+        // Ищем этот заказ в optimistic orders
+        const optimisticOrder = optimisticOrders.find(o => 
+          (o._id && o._id === order._id) || o["Номер заказа"] === order["Номер заказа"]
+        );
+        return optimisticOrder || order;
+      }
+      return order;
+    });
+  }, [orders, optimisticOrders, isDragActive, pendingMoves]);
+  
   const ordersMap = groupOrdersByDate(currentOrders);
 
   // Синхронизируем оптимистичные заказы с реальными
   useEffect(() => {
     if (orders.length > 0) {
+      // Если это первая загрузка - инициализируем
+      if (optimisticOrders.length === 0) {
+        setOptimisticOrders(orders);
+        return;
+      }
+      
+      // Обновляем optimistic данные только для заказов, которые НЕ находятся в процессе перемещения
       setOptimisticOrders(prevOptimistic => {
-        // Первая загрузка - просто устанавливаем все заказы
-        if (prevOptimistic.length === 0) {
-          return orders;
-        }
-        
-        // Если есть pending операции - игнорируем обновления полностью
-        if (pendingMoves.size > 0) {
-          return prevOptimistic; // Возвращаем текущие оптимистичные данные без изменений
-        }
-        
-        // Нет pending операций - безопасно обновляем все
-        return orders;
+        return orders.map(order => {
+          const orderId = order._id || order["Номер заказа"];
+          
+          // Если заказ в pending состоянии - оставляем как есть (не перезаписываем)
+          if (pendingMoves.has(orderId)) {
+            const existingOptimistic = prevOptimistic.find(o => 
+              (o._id && o._id === order._id) || o["Номер заказа"] === order["Номер заказа"]
+            );
+            return existingOptimistic || order;
+          }
+          
+          // Для всех остальных - используем свежие данные из источника
+          return order;
+        });
       });
     }
-  }, [orders]);
+  }, [orders, pendingMoves]); // Зависимость от pendingMoves важна
+  
+  // Отдельный эффект для очистки pending moves через таймаут (страховка)
+  useEffect(() => {
+    if (pendingMoves.size > 0) {
+      const timeout = setTimeout(() => {
+        console.log('Force clearing pending moves after timeout');
+        setPendingMoves(new Set());
+      }, 10000); // 10 секунд - страховочный таймаут
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [pendingMoves]);
 
   // Функция для показа уведомлений
   const showNotification = (message, type = 'error') => {
@@ -181,6 +227,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
   const handleDragStart = (e, order, sourceDate) => {
     console.log('Drag start:', order, sourceDate);
     setDraggedOrder({ order, sourceDate });
+    setIsDragActive(true); // Блокируем синхронизацию во время перетаскивания
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', ''); // Required for some browsers
     
@@ -193,6 +240,11 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
     console.log('Drag end');
     setDraggedOrder(null);
     setDragOverColumn(null);
+    
+    // Разрешаем синхронизацию через небольшую задержку
+    setTimeout(() => {
+      setIsDragActive(false);
+    }, 300); // Увеличиваем до 300ms для предотвращения мерцания
     
     // Remove visual feedback
     e.target.classList.remove('dragging');
