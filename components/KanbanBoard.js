@@ -641,7 +641,18 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                             }}>
                               {order["Планируемая дата выдачи"] ? `${order["Планируемая дата выдачи"]} • ` : ''}
                               {order["Клиент"] || ''}
-                              {order["Оплата"] ? ` • ${order["Оплата"]}` : ''}
+                              {order["Оплата"] && (
+                                <>
+                                  {' • '}
+                                  <span style={{
+                                    color: String(order["Оплата"]).toLowerCase().includes('не оплачен') ? '#d32f2f' : 'inherit',
+                                    fontStyle: String(order["Оплата"]).toLowerCase().includes('не оплачен') ? 'italic' : 'normal',
+                                    fontWeight: String(order["Оплата"]).toLowerCase().includes('не оплачен') ? 500 : 'normal'
+                                  }}>
+                                    {order["Оплата"]}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         );
