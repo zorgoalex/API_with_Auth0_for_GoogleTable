@@ -122,10 +122,10 @@ export default function Layout({ isAuthenticated, user }) {
           "Планируемая дата выдачи": targetDateStr 
         };
         
-        // Добавляем таймаут в 10 секунд
+        // Добавляем таймаут в 20 секунд
         const updatePromise = dataTableRef.current.updateOrderFields(order._id, fieldsToUpdate);
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Update timeout')), 10000)
+          setTimeout(() => reject(new Error('Update timeout')), 20000)
         );
         
         await Promise.race([updatePromise, timeoutPromise]);
