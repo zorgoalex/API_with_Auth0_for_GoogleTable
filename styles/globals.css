@@ -664,6 +664,17 @@ p {
   }
 }
 
+@keyframes slideIn {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 /* Адаптивность */
 @media (max-width: 768px) {
   .sidebar {
@@ -706,5 +717,81 @@ p {
     flex-direction: column;
     gap: var(--space-4);
     text-align: center;
+  }
+}
+
+/* Drag and Drop стили для Kanban доски */
+.kanban-card {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.kanban-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.kanban-card.dragging {
+  opacity: 0.6;
+  transform: rotate(5deg);
+  z-index: 1000;
+}
+
+.kanban-column {
+  transition: all 0.2s ease;
+}
+
+.kanban-column.drag-over {
+  background-color: #e3f2fd !important;
+  border: 2px dashed #2196f3 !important;
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3) !important;
+}
+
+.kanban-column.drag-over::before {
+  content: 'Перетащите сюда';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(33, 150, 243, 0.1);
+  color: #1976d2;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Указатель перетаскивания */
+.dragging-cursor {
+  cursor: grabbing !important;
+}
+
+.dragging-cursor * {
+  cursor: grabbing !important;
+}
+
+/* Стили для pending карточек */
+.kanban-card.pending-update {
+  pointer-events: none;
+}
+
+.kanban-card.pending-update::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Стили для mobile drag and drop */
+@media (max-width: 768px) {
+  .kanban-card:active {
+    transform: scale(1.05);
+    z-index: 1000;
   }
 } 

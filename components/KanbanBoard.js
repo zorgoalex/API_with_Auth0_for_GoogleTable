@@ -60,12 +60,32 @@ function capitalizeFirst(str) {
   return str[0].toUpperCase() + str.slice(1).toLowerCase();
 }
 
-export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdate }) {
+export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdate, onOrderMove }) {
   const [containerWidth, setContainerWidth] = useState(1200);
+  const [draggedOrder, setDraggedOrder] = useState(null);
+  const [dragOverColumn, setDragOverColumn] = useState(null);
+  const [optimisticOrders, setOptimisticOrders] = useState([]); // Локальная копия заказов для оптимистичных обновлений
+  const [pendingMoves, setPendingMoves] = useState(new Set()); // Отслеживание заказов в процессе перемещения
+  const [notification, setNotification] = useState(null); // Уведомления об ошибках
   const containerRef = useRef(null);
   const columnRefs = useRef({});
   
-  const ordersMap = groupOrdersByDate(orders);
+  // Используем оптимистичные заказы, если они есть, иначе исходные
+  const currentOrders = optimisticOrders.length > 0 ? optimisticOrders : orders;
+  const ordersMap = groupOrdersByDate(currentOrders);
+
+  // Синхронизируем оптимистичные заказы с реальными
+  useEffect(() => {
+    if (orders.length > 0) {
+      setOptimisticOrders(orders);
+    }
+  }, [orders]);
+
+  // Функция для показа уведомлений
+  const showNotification = (message, type = 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000); // Автоматически скрываем через 4 секунды
+  };
 
   // Константы для адаптивного дизайна
   const DESKTOP_COLUMN_WIDTH = 260;
@@ -137,14 +157,133 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
     return rows;
   }, [days, actualColumnsPerRow]);
 
-
-
-
   const handleCheckboxChange = (order, isChecked) => {
     if (!onOrderStatusUpdate) return;
     const newStatus = isChecked ? 'Выдан' : '-';
     const fieldsToUpdate = { "Статус": newStatus };
     onOrderStatusUpdate(order._id, fieldsToUpdate);
+  };
+
+  // Drag and Drop handlers
+  const handleDragStart = (e, order, sourceDate) => {
+    console.log('Drag start:', order, sourceDate);
+    setDraggedOrder({ order, sourceDate });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', ''); // Required for some browsers
+    
+    // Add visual feedback
+    e.target.classList.add('dragging');
+    document.body.classList.add('dragging-cursor');
+  };
+
+  const handleDragEnd = (e) => {
+    console.log('Drag end');
+    setDraggedOrder(null);
+    setDragOverColumn(null);
+    
+    // Remove visual feedback
+    e.target.classList.remove('dragging');
+    document.body.classList.remove('dragging-cursor');
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragEnter = (e, targetDate) => {
+    e.preventDefault();
+    setDragOverColumn(targetDate);
+  };
+
+  const handleDragLeave = (e) => {
+    // Only clear if we're leaving the column entirely
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverColumn(null);
+    }
+  };
+
+  const handleDrop = async (e, targetDate) => {
+    e.preventDefault();
+    setDragOverColumn(null);
+    
+    if (!draggedOrder || !onOrderMove) {
+      console.log('No dragged order or onOrderMove handler');
+      return;
+    }
+
+    const { order, sourceDate } = draggedOrder;
+    const formattedTargetDate = formatDateUniversal(targetDate);
+    
+    if (sourceDate === formattedTargetDate) {
+      console.log('Same date, no move needed');
+      return;
+    }
+
+    console.log('Moving order optimistically:', {
+      orderNumber: order["Номер заказа"],
+      from: sourceDate,
+      to: formattedTargetDate
+    });
+
+    const orderId = order._id || order["Номер заказа"];
+    
+    // Оптимистичное обновление - сразу перемещаем карточку
+    setOptimisticOrders(prevOrders => {
+      return prevOrders.map(o => {
+        if ((o._id && o._id === order._id) || o["Номер заказа"] === order["Номер заказа"]) {
+          return {
+            ...o,
+            "Планируемая дата выдачи": formattedTargetDate
+          };
+        }
+        return o;
+      });
+    });
+
+    // Помечаем заказ как находящийся в процессе обновления
+    setPendingMoves(prev => new Set([...prev, orderId]));
+
+    try {
+      // Вызываем реальное обновление в источнике
+      await onOrderMove(order, sourceDate, formattedTargetDate);
+      
+      // Успешно - убираем из pending
+      setPendingMoves(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(orderId);
+        return newSet;
+      });
+      
+      console.log('Order move completed successfully');
+      
+    } catch (error) {
+      console.error('Error moving order, reverting:', error);
+      
+      // Ошибка - откатываем изменения
+      setOptimisticOrders(prevOrders => {
+        return prevOrders.map(o => {
+          if ((o._id && o._id === order._id) || o["Номер заказа"] === order["Номер заказа"]) {
+            return {
+              ...o,
+              "Планируемая дата выдачи": sourceDate // Возвращаем исходную дату
+            };
+          }
+          return o;
+        });
+      });
+      
+      // Убираем из pending
+      setPendingMoves(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(orderId);
+        return newSet;
+      });
+      
+      // Показываем уведомление об ошибке
+      showNotification(`Ошибка перемещения заказа ${order["Номер заказа"]}: ${error.message}`, 'error');
+      console.warn('Карточка возвращена на исходное место из-за ошибки обновления');
+    }
   };
 
   return (
@@ -158,9 +297,33 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
         background: '#fdfdfe',
         padding: 16,
         overflow: 'hidden',
+        position: 'relative',
       }}
       className="kanban-board-container"
     >
+      {/* Уведомления */}
+      {notification && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 20,
+            right: 20,
+            zIndex: 1000,
+            background: notification.type === 'error' ? '#ff4444' : '#44aa44',
+            color: 'white',
+            padding: '12px 16px',
+            borderRadius: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            maxWidth: '300px',
+            fontSize: 14,
+            fontWeight: 500,
+            animation: 'slideIn 0.3s ease-out'
+          }}
+          onClick={() => setNotification(null)}
+        >
+          {notification.message}
+        </div>
+      )}
 
 
       {/* Многорядная сетка дней */}
@@ -202,10 +365,17 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                   String(order["Статус"] ?? '').toLowerCase() === 'выдан'
                 );
                 
+                const isDragOver = dragOverColumn === key;
+                
                 return (
                   <div
                     key={key}
                     ref={el => columnRefs.current[key] = el}
+                    className={`kanban-column ${isDragOver ? 'drag-over' : ''}`}
+                    onDragOver={handleDragOver}
+                    onDragEnter={(e) => handleDragEnter(e, key)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, day)}
                     style={{
                       background: allCompleted ? '#f8fcf8' : '#fcfcfc',
                       borderRadius: isMobile ? 8 : 10,
@@ -216,6 +386,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                       display: 'flex',
                       flexDirection: 'column',
                       fontSize: isMobile ? 12 : 14,
+                      position: 'relative',
                     }}
                   >
                     {/* Заголовок дня */}
@@ -269,14 +440,21 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                       {dayOrders.map(order => {
                         const isIssued = String(order["Статус"] ?? '').toLowerCase() === 'выдан';
                         const isReady = String(order["Статус"] ?? '').toLowerCase() === 'готов';
+                        const orderId = order._id || order["Номер заказа"];
+                        const isPending = pendingMoves.has(orderId);
                         
                         return (
                           <div
                             key={order._id || order["Номер заказа"] || Math.random()}
+                            className={`kanban-card ${isPending ? 'pending-update' : ''}`}
+                            draggable={!isPending}
+                            onDragStart={(e) => handleDragStart(e, order, key)}
+                            onDragEnd={handleDragEnd}
                             style={{
                               border: isReady ? '2px solid #4caf50' : '1px solid #c0c0c0',
                               borderRadius: isMobile ? 5 : 7,
                               background: (() => {
+                                if (isPending) return '#f5f5f5'; // Серый фон для pending карточек
                                 if (String(order["Номер заказа"] || '').startsWith('К')) {
                                   return isIssued ? '#f5f0e6' : '#faf7f0';
                                 }
@@ -290,9 +468,25 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                               flexDirection: 'column',
                               gap: isMobile ? 4 : 5,
                               position: 'relative',
-                              transition: 'all 0.2s ease',
+                              cursor: isPending ? 'not-allowed' : 'grab',
+                              opacity: isPending ? 0.7 : 1,
                             }}
                           >
+                            {/* Индикатор загрузки для pending карточек */}
+                            {isPending && (
+                              <div style={{
+                                position: 'absolute',
+                                top: 2,
+                                right: 2,
+                                width: 12,
+                                height: 12,
+                                borderRadius: '50%',
+                                border: '2px solid #ccc',
+                                borderTop: '2px solid #2196f3',
+                                animation: 'spin 1s linear infinite',
+                                zIndex: 10
+                              }} />
+                            )}
                             <div style={{ 
                               display: 'flex', 
                               alignItems: 'center', 

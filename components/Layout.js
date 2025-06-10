@@ -111,6 +111,35 @@ export default function Layout({ isAuthenticated, user }) {
     }
   }, []); // dataTableRef стабилен, поэтому массив зависимостей пуст
 
+  // Функция для перемещения заказа между датами
+  const handleOrderMove = useCallback(async (order, sourceDateStr, targetDateStr) => {
+    console.log('handleOrderMove called:', order, sourceDateStr, targetDateStr);
+    
+    if (dataTableRef.current && typeof dataTableRef.current.updateOrderFields === 'function') {
+      try {
+        // Обновляем планируемую дату выдачи заказа с таймаутом
+        const fieldsToUpdate = { 
+          "Планируемая дата выдачи": targetDateStr 
+        };
+        
+        // Добавляем таймаут в 10 секунд
+        const updatePromise = dataTableRef.current.updateOrderFields(order._id, fieldsToUpdate);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Update timeout')), 10000)
+        );
+        
+        await Promise.race([updatePromise, timeoutPromise]);
+        console.log(`Order ${order["Номер заказа"]} moved from ${sourceDateStr} to ${targetDateStr}`);
+      } catch (error) {
+        console.error('Error moving order:', error);
+        throw error; // Перебрасываем ошибку для обработки в KanbanBoard
+      }
+    } else {
+      console.warn('DataTable ref or updateOrderFields method not available.');
+      throw new Error('DataTable not available for order move');
+    }
+  }, []); // dataTableRef стабилен, поэтому массив зависимостей пуст
+
   // Обработка изменения размера окна
   useEffect(() => {
     const handleResize = () => {
@@ -259,6 +288,7 @@ export default function Layout({ isAuthenticated, user }) {
                 days={generatedDays} 
                 orders={allOrders} 
                 onOrderStatusUpdate={handleOrderStatusUpdate}
+                onOrderMove={handleOrderMove}
               />
             ) : (
               <div className="analytics-placeholder">
