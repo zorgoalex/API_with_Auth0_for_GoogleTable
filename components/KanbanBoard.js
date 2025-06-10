@@ -77,7 +77,20 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
   // Синхронизируем оптимистичные заказы с реальными
   useEffect(() => {
     if (orders.length > 0) {
-      setOptimisticOrders(orders);
+      setOptimisticOrders(prevOptimistic => {
+        // Первая загрузка - просто устанавливаем все заказы
+        if (prevOptimistic.length === 0) {
+          return orders;
+        }
+        
+        // Если есть pending операции - игнорируем обновления полностью
+        if (pendingMoves.size > 0) {
+          return prevOptimistic; // Возвращаем текущие оптимистичные данные без изменений
+        }
+        
+        // Нет pending операций - безопасно обновляем все
+        return orders;
+      });
     }
   }, [orders]);
 
@@ -241,49 +254,50 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
       });
     });
 
-    // Помечаем заказ как находящийся в процессе обновления
+    // Помечаем заказ как находящийся в процессе обновления (кратковременно)
     setPendingMoves(prev => new Set([...prev, orderId]));
+    
+    // Убираем спиннер через короткое время (визуальная обратная связь)
+    setTimeout(() => {
+      setPendingMoves(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(orderId);
+        return newSet;
+      });
+    }, 500); // 0.5 секунды
 
-    try {
-      // Вызываем реальное обновление в источнике
-      await onOrderMove(order, sourceDate, formattedTargetDate);
-      
-      // Успешно - убираем из pending
-      setPendingMoves(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(orderId);
-        return newSet;
+    // Вызываем реальное обновление в источнике БЕЗ ожидания (fire-and-forget)
+    onOrderMove(order, sourceDate, formattedTargetDate)
+      .then(() => {
+        console.log('Order move completed successfully');
+      })
+      .catch((error) => {
+        console.error('Error moving order:', error);
+        
+        // Различаем таймауты и реальные ошибки
+        const isTimeout = error.message.includes('timeout') || error.message.includes('Update timeout');
+        
+        if (isTimeout) {
+          // Таймаут - возможно операция все еще выполняется, НЕ откатываем
+          showNotification(`Таймаут обновления заказа ${order["Номер заказа"]}. Проверьте результат в таблице.`, 'warning');
+        } else {
+          // Реальная ошибка - откатываем изменения
+          setOptimisticOrders(prevOrders => {
+            return prevOrders.map(o => {
+              if ((o._id && o._id === order._id) || o["Номер заказа"] === order["Номер заказа"]) {
+                return {
+                  ...o,
+                  "Планируемая дата выдачи": sourceDate // Возвращаем исходную дату
+                };
+              }
+              return o;
+            });
+          });
+          
+          showNotification(`Ошибка перемещения заказа ${order["Номер заказа"]}: ${error.message}`, 'error');
+          console.warn('Карточка возвращена на исходное место из-за ошибки API');
+        }
       });
-      
-      console.log('Order move completed successfully');
-      
-    } catch (error) {
-      console.error('Error moving order, reverting:', error);
-      
-      // Ошибка - откатываем изменения
-      setOptimisticOrders(prevOrders => {
-        return prevOrders.map(o => {
-          if ((o._id && o._id === order._id) || o["Номер заказа"] === order["Номер заказа"]) {
-            return {
-              ...o,
-              "Планируемая дата выдачи": sourceDate // Возвращаем исходную дату
-            };
-          }
-          return o;
-        });
-      });
-      
-      // Убираем из pending
-      setPendingMoves(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(orderId);
-        return newSet;
-      });
-      
-      // Показываем уведомление об ошибке
-      showNotification(`Ошибка перемещения заказа ${order["Номер заказа"]}: ${error.message}`, 'error');
-      console.warn('Карточка возвращена на исходное место из-за ошибки обновления');
-    }
   };
 
   return (
@@ -309,7 +323,8 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
             top: 20,
             right: 20,
             zIndex: 1000,
-            background: notification.type === 'error' ? '#ff4444' : '#44aa44',
+            background: notification.type === 'error' ? '#ff4444' : 
+                       notification.type === 'warning' ? '#ff9800' : '#44aa44',
             color: 'white',
             padding: '12px 16px',
             borderRadius: 8,
