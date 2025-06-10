@@ -531,7 +531,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                                 <span style={{ 
                                   fontWeight: 700, 
                                   color: String(order["Номер заказа"] || '').startsWith('К') ? '#8B4513' : '#1976d2', 
-                                  fontSize: isMobile ? 14 : 18,
+                                  fontSize: isMobile ? 15 : 20,
                                   lineHeight: 1
                                 }}>
                                   {order["Номер заказа"] || ''}
@@ -539,7 +539,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                                     <span style={{ 
                                       color: '#d32f2f', 
                                       fontWeight: 700,
-                                      fontSize: isMobile ? 14 : 18
+                                      fontSize: isMobile ? 15 : 20
                                     }}>
                                       -{order["Номер заказа присадки"]}
                                     </span>
