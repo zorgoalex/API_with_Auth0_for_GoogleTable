@@ -1,88 +1,132 @@
-# Google Таблица с Auth0
+﻿# Google Table Hub
 
-Веб-приложение для работы с Google Sheets через Auth0 авторизацию и Handsontable интерфейс.
+Внутреннее Next.js-приложение для оперативной работы с производственным регистром в Google Sheets. После авторизации через Auth0 пользователи получают единый рабочий стол: интерактивную таблицу на Handsontable и канбан-доску, синхронизированные с одной и той же гугл-таблицей. Сервис поддерживает редактирование записей, отметку статусов, перемещение заказов между датами и полу-реальное время (Drive push + SSE, fallback polling).
 
-## Настройка
+## Основные возможности
+- Авторизация сотрудников через Auth0 (SPA flow с silent token).
+- Отображение Google Sheet в Handsontable с возможностью редактирования, добавления и удаления строк.
+- Очередь изменений с дебаунсом и безопасной записью в лист через API /api/sheet.
+- Канбан-доска, группирующая заказы по плановым датам; drag&drop обновляет дату прямо в таблице.
+- Отметка статуса заказа чекбоксом внутри канбана (обновляет соответствующий столбец в sheet).
+- Попытка подключения к push-уведомлениям Google Drive и трансляция изменений в браузер через Server-Sent Events; автоматический откат на опрос каждые 5 секунд при отсутствии вебхуков.
+- REST API-обёртка над Google Sheets для front-end и внешних интеграций.
 
-### 1. Google Service Account
+## Технологический стек
+- Next.js 14 + React 18.
+- Auth0 SPA SDK (@auth0/auth0-react).
+- Handsontable (@handsontable/react) для табличного UI.
+- Google Sheets API (google-spreadsheet) и Google Drive API (googleapis) для чтения/записи и push-уведомлений.
+- JWT верификация (jsonwebtoken, jwks-rsa).
+- Server-Sent Events для доставки уведомлений в браузер.
 
-1. Создайте проект в [Google Cloud Console](https://console.cloud.google.com/)
-2. Включите Google Sheets API и Google Drive API
-3. Создайте сервисный аккаунт и сгенерируйте JSON ключ
-4. Поделитесь вашей Google таблицей с email сервисного аккаунта (права "Редактор")
-5. Скопируйте ID таблицы из URL
+## Архитектура и ключевые модули
+- components/Layout.js — оболочка рабочего стола: управляет навигацией между таблицей, канбаном и настройками, хранит общий список заказов и вычисляет набор дат для доски.
+- components/DataTable.js — Handsontable-обёртка. Подтягивает данные из /api/sheet, ведёт очередь отложенных изменений, создаёт/удаляет строки, выставляет высоту таблицы, управляет push/SSE и fallback polling.
+- components/KanbanBoard.js — визуализация заказов по дням. Показывает статусы, материалы, подсчитывает суммарную площадь, поддерживает drag&drop и оптимистичные обновления, вызывает методы Layout для записи в таблицу.
+- lib/google-sheets.js — доступ к Google Sheet через сервисный аккаунт: чтение всех строк, добавление, обновление (по owNumber) и удаление.
+- lib/auth.js — проверка JWT от Auth0, в том числе через JWKS, и утилита equireAuth для API-роутов.
+- pages/api/sheet.js — REST CRUD для таблицы (GET/POST/PUT/DELETE). Все запросы защищены equireAuth.
+- pages/api/setup-push.js — настройка drive.files.watch, проверяет окружение, создаёт канал на Google Drive и возвращает информацию о вебхуке.
+- pages/api/webhook/drive-changes.js — точка приёма push-уведомлений от Google и SSE-эндпоинт для клиентов. Рассылает события всем подключённым браузерам.
+- pages/index.js, _app.js, _document.js — корневые страницы и провайдер Auth0.
+- styles/globals.css — единый стиль интерфейса (светлая/тёмная тема, состояния drag&drop и т.д.).
+- Документы Google Sheets Api Quota.md, Setting push Google Drive…md содержат заметки по квотам и настройке вебхуков.
 
-### 2. Auth0
+## Переменные окружения
 
-1. Зарегистрируйтесь в [Auth0](https://auth0.com/)
-2. Создайте приложение типа "Single Page Application"
-3. В настройках добавьте:
-   - Allowed Callback URLs: `http://localhost:3000` (и ваш продакшн домен)
-   - Allowed Logout URLs: `http://localhost:3000` (и ваш продакшн домен)
-   - Allowed Web Origins: `http://localhost:3000` (и ваш продакшн домен)
+| Переменная | Описание | Обязательность |
+| --- | --- | --- |
+| AUTH0_BASE_URL | Базовый URL приложения (например, http://localhost:3000 локально или продовый домен). Используется на клиенте и при формировании вебхуков. | Да |
+| AUTH0_ISSUER_BASE_URL | Домен арендатора Auth0, например https://your-tenant.eu.auth0.com. | Да |
+| AUTH0_CLIENT_ID | Client ID SPA-приложения в Auth0. | Да |
+| AUTH0_SECRET | Секрет приложения (используется Next.js на сервере; нужен в production, для разработки можно заменить случайной строкой). | Рекомендуется |
+| GOOGLE_SHEET_ID | ID таблицы в Google Sheets (часть URL после /d/). | Да |
+| GOOGLE_CREDENTIALS | JSON сервисного аккаунта (как выдаёт Google; строка одним значением). Предпочтительный способ передачи ключей. | Да, если не используете пары ниже |
+| GOOGLE_SERVICE_ACCOUNT_EMAIL | Email сервисного аккаунта. Задавайте вместе с GOOGLE_PRIVATE_KEY, когда GOOGLE_CREDENTIALS недоступна. | Условно |
+| GOOGLE_PRIVATE_KEY | Приватный ключ сервисного аккаунта. Храните в кавычках, переводите строки через \n. | Условно |
 
-### 3. Переменные окружения
+> Совет: убедитесь, что сервисный аккаунт имеет доступ на чтение/запись к целевой таблице (поделитесь таблицей на email аккаунта). Если используете push-уведомления, учётке также нужна роль Drive API Service Agent или аналогичный доступ к Drive.
 
-Создайте файл `.env.local`:
+## Настройка Auth0
 
-```bash
-# Auth0
-AUTH0_SECRET=your-secret-32-characters-minimum
-AUTH0_BASE_URL=http://localhost:3000
-AUTH0_ISSUER_BASE_URL=https://your-domain.auth0.com
-AUTH0_CLIENT_ID=your-client-id
-AUTH0_CLIENT_SECRET=your-client-secret
+1. Создайте SPA-приложение в Auth0.
+2. В разделе **Application URIs** добавьте AUTH0_BASE_URL в поля Allowed Callback URLs, Allowed Logout URLs и Allowed Web Origins.
+3. Разрешите audience https://{tenant}.auth0.com/api/v2/ для выдачи access token (Management API). Добавьте scope openid profile email.
+4. Включите встроенный Login, убедитесь что silent login работает (для getAccessTokenSilently).
 
-# Google Sheets
-GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour-private-key-here\n-----END PRIVATE KEY-----"
-GOOGLE_SHEET_ID=your-google-sheet-id
-```
+## Настройка Google API
 
-## Установка и запуск
+1. Создайте сервисный аккаунт в Google Cloud Console, включите **Google Sheets API** и **Google Drive API**.
+2. Скачайте JSON ключ. Либо положите содержимое в GOOGLE_CREDENTIALS, либо вынесите client_email и private_key в отдельные переменные.
+3. Поделитесь Google Sheet с сервисным аккаунтом (роль «Редактор»).
+4. Для push-уведомлений:
+   - Подтвердите домен, на который будет указывать вебхук (AUTH0_BASE_URL/api/webhook/drive-changes) в Google Search Console.
+   - Убедитесь, что приложение доступно по HTTPS из интернета.
+   - После запуска авторизуйтесь и выполните POST /api/setup-push (DataTable делает это автоматически; статус смотрите в консоли браузера).
 
-```bash
-# Установка зависимостей
-npm install
+Без публичного домена приложение продолжит работать на fallback polling каждые 5 секунд.
 
-# Запуск в режиме разработки
-npm run dev
+## Локальный запуск
 
-# Сборка для продакшна
-npm run build
-npm start
-```
+1. Установите зависимости: 
+pm install.
+2. Создайте .env.local с переменными из таблицы.
+3. Запустите dev-сервер: 
+pm run dev (по умолчанию http://localhost:3000).
+4. Авторизуйтесь через Auth0. После входа:
+   - Вкладка «Таблица» загрузит данные из Google Sheets. Индикатор статус-бара покажет состояние соединения (polling / push / ошибка).
+   - Вкладка «Канбан» отобразит заказы по дням. Перетаскивание заказа меняет дату в таблице.
+5. Для теста realtime убедитесь, что Google может достучаться до вебхука или используйте инструмент вроде ngrok, обновите AUTH0_BASE_URL и перезапустите сервер.
 
-## Деплой на Vercel
+## API и интеграция
 
-1. Загрузите проект на GitHub
-2. Подключите репозиторий к Vercel
-3. Добавьте переменные окружения в настройках Vercel
-4. Обновите AUTH0_BASE_URL на ваш продакшн домен
+| Метод и путь | Описание |
+| --- | --- |
+| GET /api/sheet | Возвращает все строки листа. Требует Authorization: Bearer <JWT> от Auth0. |
+| POST /api/sheet | Добавляет строку (ожидает JSON с полями, совпадающими с заголовками таблицы). |
+| PUT /api/sheet?rowId={n} | Обновляет строку по номеру. Тело — объект со значениями столбцов. |
+| DELETE /api/sheet?rowId={n} | Удаляет строку. |
+| POST /api/setup-push | Регистрирует канал drive.files.watch для текущего листа. Требует доступного из интернета URL. |
+| GET /api/webhook/drive-changes?token=... | SSE-канал для браузера. Токен — тот же access token Auth0. |
+| POST /api/webhook/drive-changes | Точка приёма вебхуков Google Drive. Google вызывает её, когда лист меняется. |
 
-## Функционал
-
-- Авторизация через Auth0
-- Просмотр и редактирование Google таблицы
-- Добавление и удаление строк
-- Изменения синхронизируются с Google Sheets в реальном времени
+При разработке следите за логами console (в коде оставлено много диагностических сообщений, помогающих отладить интеграцию).
 
 ## Структура проекта
 
 ```
-├── components/
-│   └── DataTable.js     # Компонент Handsontable
-├── lib/
-│   ├── auth.js          # Утилиты Auth0
-│   └── google-sheets.js # Работа с Google Sheets
-├── pages/
-│   ├── api/
-│   │   └── sheet.js     # API endpoint
-│   ├── _app.js          # Главный компонент с Auth0Provider
-│   └── index.js         # Главная страница
-├── styles/
-│   └── globals.css      # Глобальные стили
-├── .env.example         # Пример переменных окружения
-├── next.config.js       # Конфигурация Next.js
-└── package.json         # Зависимости
-``` 
+components/
+  DataTable.js          # Handsontable + realtime логика
+  KanbanBoard.js        # Канбан-представление заказов
+  Layout.js             # Общий фрейм приложения
+lib/
+  auth.js               # Верификация JWT и guard для API
+  google-sheets.js      # Утилиты работы с Google Sheets
+pages/
+  api/
+    sheet.js            # CRUD над таблицей
+    setup-push.js       # Регистрация push-канала
+    webhook/
+      drive-changes.js  # Вебхук и SSE
+  _app.js
+  _document.js
+  index.js
+styles/
+  globals.css
+docs/
+  Google Sheets Api Quota.md
+  Setting push Google Drive…md
+```
+
+## Особенности и советы по эксплуатации
+- Названия столбцов в таблице должны точно совпадать с теми, что используются в коде (см. DataTable и KanbanBoard). Если вы переименуете колонку в Google Sheet, обновите строки в компонентах.
+- Канбан рассчитывает набор дат динамически: 5 дней назад от текущего дня + все рабочие дни до максимальной плановой даты в таблице (воскресенье пропускается).
+- Очередь изменений в DataTable работает с задержкой 500 мс; не закрывайте вкладку, пока индикатор «Сохранение…» активен.
+- При локальной разработке push-канал, как правило, не поднимется — ориентируйтесь на polling и логи.
+- Если заметите неожиданные изменения в файлах, остановитесь и уточните у команды (репозиторий может использоваться как рабочий).
+
+## Скрипты npm
+- `npm run dev` — запуск Next.js в режиме разработки.
+- `npm run build` — сборка production.
+- `npm start` — запуск production-сборки.
+- `npm run lint` — проверка линтером.
