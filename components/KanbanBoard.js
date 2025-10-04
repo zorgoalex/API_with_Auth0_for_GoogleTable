@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { useAuth0 } from '@auth0/auth0-react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 function formatDateUniversal(dateInput) {
   if (!dateInput) return '';
@@ -15,6 +15,64 @@ function formatDateUniversal(dateInput) {
 }
 
 const WEEKDAYS = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
+
+const statusConfig = [
+  {
+    key: 'Фрезеровка',
+    label: 'Фрезеровка',
+    statuses: ['Модерн', 'Фрезеровка', 'Черновой', 'Выборка', 'Краска']
+  },
+  {
+    key: 'Оплата',
+    label: 'Оплата',
+    statuses: ['не оплачен', 'в долг', 'частично', 'оплачен', 'за счет фирмы']
+  },
+  {
+    key: 'Статус',
+    label: 'Статус',
+    statuses: ['Готов', 'Выдан', 'Распилен', '-']
+  },
+  {
+    key: 'CAD файлы',
+    label: 'CAD файлы',
+    statuses: ['Отрисован', '-']
+  },
+  {
+    key: 'Материал',
+    label: 'Материал',
+    statuses: ['16мм', '18мм', '8мм', '10мм', 'ЛДСП']
+  },
+  {
+    key: 'Закуп пленки',
+    label: 'Закуп пленки',
+    statuses: ['Готов', '-']
+  },
+  {
+    key: 'Распил',
+    label: 'Распил',
+    statuses: ['Готов', '-']
+  },
+  {
+    key: 'Шлифовка',
+    label: 'Шлифовка',
+    statuses: ['Готов', '-']
+  },
+  {
+    key: 'Пленка',
+    label: 'Пленка',
+    statuses: ['Готов', '-']
+  },
+  {
+    key: 'Упаковка',
+    label: 'Упаковка',
+    statuses: ['Готов', '-']
+  },
+  {
+    key: 'Выдан',
+    label: 'Выдан',
+    statuses: ['Готов', '-']
+  }
+];
 function getDayName(date) {
   const d = new Date(date);
   return WEEKDAYS[d.getDay()];
@@ -67,12 +125,43 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
   const [optimisticOrders, setOptimisticOrders] = useState([]); // Локальная копия заказов для оптимистичных обновлений
   const [pendingMoves, setPendingMoves] = useState(new Set()); // Отслеживание заказов в процессе перемещения
   const [notification, setNotification] = useState(null); // Уведомления об ошибках
+  const [contextMenuState, setContextMenuState] = useState({ open: false });
   const containerRef = useRef(null);
   const columnRefs = useRef({});
-  
+  const longPressTimerRef = useRef(null);
+  const lastPointerDownRef = useRef({});
+  const activeContextOrderId = contextMenuState.order?._id;
+  const notificationTimerRef = useRef(null);
+  const contextMenuRef = useRef(null);
+
   // Используем оптимистичные заказы, если они есть, иначе исходные
   const currentOrders = optimisticOrders.length > 0 ? optimisticOrders : orders;
   const ordersMap = groupOrdersByDate(currentOrders);
+
+  const derivedStatusOptions = useMemo(() => {
+    const uniqueValues = new Map();
+    statusConfig.forEach(({ key }) => {
+      uniqueValues.set(key, new Set());
+    });
+
+    currentOrders.forEach(order => {
+      statusConfig.forEach(({ key }) => {
+        const value = order[key];
+        if (value && uniqueValues.has(key)) {
+          uniqueValues.get(key).add(String(value));
+        }
+      });
+    });
+
+    return statusConfig.map(cfg => {
+      const discovered = Array.from(uniqueValues.get(cfg.key) || [])
+        .filter(value => value && !cfg.statuses.includes(value));
+      return {
+        ...cfg,
+        options: [...cfg.statuses, ...discovered]
+      };
+    });
+  }, [currentOrders]);
 
   // Синхронизируем оптимистичные заказы с реальными
   useEffect(() => {
@@ -92,13 +181,19 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
         return orders;
       });
     }
-  }, [orders]);
+  }, [orders, pendingMoves]);
 
   // Функция для показа уведомлений
-  const showNotification = (message, type = 'error') => {
+  const showNotification = useCallback((message, type = 'error') => {
+    if (notificationTimerRef.current) {
+      clearTimeout(notificationTimerRef.current);
+    }
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4000); // Автоматически скрываем через 4 секунды
-  };
+    notificationTimerRef.current = setTimeout(() => {
+      setNotification(null);
+      notificationTimerRef.current = null;
+    }, 4000);
+  }, []);
 
   // Константы для адаптивного дизайна
   const DESKTOP_COLUMN_WIDTH = 260;
@@ -109,6 +204,90 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
 
   // Детекция мобильных устройств
   const isMobile = containerWidth <= 768;
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenuState({ open: false });
+  }, []);
+
+  const updateOrderOptimistically = useCallback((orderId, key, value) => {
+    setOptimisticOrders(prev => {
+      const base = prev && prev.length > 0 ? prev : orders;
+      return base.map(item => (
+        item._id === orderId ? { ...item, [key]: value } : item
+      ));
+    });
+  }, [orders]);
+
+  const handleStatusChange = useCallback(async (order, key, value, options = {}) => {
+    if (!order || !key || !onOrderStatusUpdate) {
+      return;
+    }
+
+    const previousValue = order[key];
+    const currentValue = String(previousValue ?? '').toLowerCase();
+    const nextValue = String(value ?? '').toLowerCase();
+    if (currentValue === nextValue) {
+      if (options.closeAfter) {
+        closeContextMenu();
+      }
+      return;
+    }
+
+    updateOrderOptimistically(order._id, key, value);
+
+    setContextMenuState(prev => {
+      if (!prev.open || !prev.order || prev.order._id !== order._id) {
+        return prev;
+      }
+      return {
+        ...prev,
+        pendingField: key,
+        order: {
+          ...prev.order,
+          [key]: value
+        }
+      };
+    });
+
+    try {
+      const updatePromise = onOrderStatusUpdate(order._id, { [key]: value }, { immediate: true });
+      if (updatePromise && typeof updatePromise.then === 'function') {
+        await updatePromise;
+      }
+
+      if (options.closeAfter) {
+        closeContextMenu();
+      }
+    } catch (error) {
+      updateOrderOptimistically(order._id, key, previousValue);
+
+      setContextMenuState(prev => {
+        if (!prev.open || !prev.order || prev.order._id !== order._id) {
+          return prev;
+        }
+        return {
+          ...prev,
+          order: {
+            ...prev.order,
+            [key]: previousValue
+          }
+        };
+      });
+
+      const label = options.label || key;
+      showNotification(`Не удалось обновить «${label}»: ${error.message || error}`, 'error');
+    } finally {
+      setContextMenuState(prev => {
+        if (!prev.open) {
+          return prev;
+        }
+        return {
+          ...prev,
+          pendingField: null
+        };
+      });
+    }
+  }, [closeContextMenu, onOrderStatusUpdate, showNotification, updateOrderOptimistically]);
 
   // Отслеживаем размер контейнера
   useEffect(() => {
@@ -130,6 +309,87 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
     }
 
     return () => resizeObserver.disconnect();
+  }, []);
+
+  useEffect(() => cancelLongPress, [cancelLongPress]);
+
+  // Закрытие меню по глобальным событиям
+  useEffect(() => {
+    if (!contextMenuState.open) return;
+
+    const handleGlobalClick = (event) => {
+      const menuElement = document.querySelector('.context-menu');
+      const mobileSheet = document.querySelector('.context-menu-sheet');
+      if (menuElement && menuElement.contains(event.target)) {
+        return;
+      }
+      if (mobileSheet && mobileSheet.contains(event.target)) {
+        return;
+      }
+      closeContextMenu();
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        closeContextMenu();
+      }
+    };
+
+    const handleScroll = () => {
+      closeContextMenu();
+    };
+
+    document.addEventListener('click', handleGlobalClick, true);
+    document.addEventListener('keydown', handleEscape);
+    const scroller = containerRef.current?.querySelector('.kanban-rows-scroller');
+    scroller?.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, true);
+      document.removeEventListener('keydown', handleEscape);
+      scroller?.removeEventListener('scroll', handleScroll);
+    };
+  }, [contextMenuState.open, closeContextMenu]);
+
+  useEffect(() => {
+    if (!contextMenuState.open || !activeContextOrderId) return;
+    const freshOrder = currentOrders.find(item => item._id === activeContextOrderId);
+    if (!freshOrder) return;
+
+    setContextMenuState(prev => {
+      if (!prev.open || !prev.order || prev.order._id !== freshOrder._id) {
+        return prev;
+      }
+      return {
+        ...prev,
+        order: freshOrder
+      };
+    });
+  }, [contextMenuState.open, activeContextOrderId, currentOrders]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (contextMenuState.open && !contextMenuState.isMobileMenu) {
+      window.requestAnimationFrame(() => {
+        const menuNode = contextMenuRef.current;
+        if (!menuNode) {
+          return;
+        }
+        const firstButton = menuNode.querySelector('button.context-menu-option:not([disabled])');
+        const target = firstButton || menuNode;
+        target.focus({ preventScroll: true });
+      });
+    }
+  }, [contextMenuState.open, contextMenuState.isMobileMenu, contextMenuState.order]);
+
+  useEffect(() => () => {
+    if (notificationTimerRef.current) {
+      clearTimeout(notificationTimerRef.current);
+      notificationTimerRef.current = null;
+    }
   }, []);
 
   // Автоматическое вычисление размеров колонок и их количества
@@ -170,11 +430,102 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
     return rows;
   }, [days, actualColumnsPerRow]);
 
+  const menuOrderNumber = contextMenuState.order?.["Номер заказа"];
+  const menuTitle = menuOrderNumber || 'Заказ';
+  const menuTitleId = contextMenuState.order ? `context-menu-title-${contextMenuState.order._id}` : 'context-menu-title';
+  const sheetTitleId = contextMenuState.order ? `context-menu-sheet-title-${contextMenuState.order._id}` : 'context-menu-sheet-title';
+  const isMenuBusy = Boolean(contextMenuState.pendingField);
+
   const handleCheckboxChange = (order, isChecked) => {
     if (!onOrderStatusUpdate) return;
     const newStatus = isChecked ? 'Выдан' : '-';
     const fieldsToUpdate = { "Статус": newStatus };
     onOrderStatusUpdate(order._id, fieldsToUpdate);
+  };
+
+  const openDesktopContextMenu = useCallback((order, position) => {
+    if (!order) return;
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const approxWidth = 320;
+    const approxHeight = 380;
+    const offset = 8;
+
+    let clickX = position.clientX;
+    let clickY = position.clientY;
+
+    if (clickX + approxWidth + offset > viewportWidth) {
+      clickX = Math.max(offset, viewportWidth - approxWidth - offset);
+    }
+    if (clickY + approxHeight + offset > viewportHeight) {
+      clickY = Math.max(offset, viewportHeight - approxHeight - offset);
+    }
+
+    setContextMenuState({
+      open: true,
+      x: clickX,
+      y: clickY,
+      order,
+      isMobileMenu: false,
+      pendingField: null
+    });
+  }, []);
+
+  const handleContextMenu = (event, order, isPendingMove) => {
+    if (isPendingMove || !onOrderStatusUpdate || isMobile) {
+      return;
+    }
+    event.preventDefault();
+    cancelLongPress();
+
+    openDesktopContextMenu(order, { clientX: event.clientX, clientY: event.clientY });
+  };
+
+  const startLongPress = (event, order, isPendingMove) => {
+    if (!isMobile || isPendingMove) return;
+    if (event.pointerType && event.pointerType !== 'touch') return;
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    lastPointerDownRef.current = {
+      id: order._id,
+      pointerId: event.pointerId ?? 'touch',
+      x: event.clientX,
+      y: event.clientY
+    };
+      longPressTimerRef.current = setTimeout(() => {
+        longPressTimerRef.current = null;
+        setContextMenuState({
+          open: true,
+          order,
+          isMobileMenu: true,
+          pendingField: null
+        });
+      }, 400);
+  };
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    lastPointerDownRef.current = {};
+  }, []);
+
+  const handlePointerUp = () => {
+    cancelLongPress();
+  };
+
+  const handlePointerMove = (event) => {
+    const info = lastPointerDownRef.current;
+    if (!info.pointerId) return;
+    const currentX = event.clientX ?? info.x;
+    const currentY = event.clientY ?? info.y;
+    const delta = Math.abs(currentX - info.x) + Math.abs(currentY - info.y);
+    if (delta > 10) {
+      cancelLongPress();
+    }
   };
 
   // Drag and Drop handlers
@@ -213,6 +564,26 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
     // Only clear if we're leaving the column entirely
     if (!e.currentTarget.contains(e.relatedTarget)) {
       setDragOverColumn(null);
+    }
+  };
+
+  const handleCardKeyDown = (event, order, isPendingMove) => {
+    if (isPendingMove || !onOrderStatusUpdate || isMobile) {
+      return;
+    }
+
+    if (
+      event.key === 'ContextMenu' ||
+      (event.shiftKey && event.key === 'F10') ||
+      event.key === 'Enter' ||
+      event.key === ' '
+    ) {
+      event.preventDefault();
+      const rect = event.currentTarget.getBoundingClientRect();
+      openDesktopContextMenu(order, {
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2
+      });
     }
   };
 
@@ -334,6 +705,8 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
             fontWeight: 500,
             animation: 'slideIn 0.3s ease-out'
           }}
+          role="status"
+          aria-live="polite"
           onClick={() => setNotification(null)}
         >
           {notification.message}
@@ -465,6 +838,16 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                             draggable={!isPending}
                             onDragStart={(e) => handleDragStart(e, order, key)}
                             onDragEnd={handleDragEnd}
+                            onContextMenu={(e) => handleContextMenu(e, order, isPending)}
+                            onPointerDown={(e) => startLongPress(e, order, isPending)}
+                            onPointerUp={handlePointerUp}
+                            onPointerCancel={cancelLongPress}
+                            onPointerMove={handlePointerMove}
+                            onKeyDown={(e) => handleCardKeyDown(e, order, isPending)}
+                            tabIndex={isPending ? -1 : 0}
+                            aria-disabled={isPending}
+                            aria-haspopup={!isMobile ? 'menu' : undefined}
+                            aria-label={`Заказ ${order["Номер заказа"] || ''}. Открыть меню статусов`}
                             style={{
                               border: isReady ? '2px solid #4caf50' : '1px solid #c0c0c0',
                               borderRadius: isMobile ? 5 : 7,
@@ -665,6 +1048,130 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
           ))}
         </div>
       </div>
+      {contextMenuState.open && contextMenuState.order && (
+        isMobile ? (
+          createPortal(
+            <div className="context-menu-backdrop" role="presentation" onClick={closeContextMenu}>
+              <div
+                className="context-menu-sheet"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={sheetTitleId}
+                aria-busy={isMenuBusy}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="context-menu-sheet__header">
+                  <div>
+                    <strong id={sheetTitleId}>Настройки заказа</strong>
+                    <div className="context-menu-sheet__subtitle">
+                      {menuTitle}
+                    </div>
+                  </div>
+                  <button className="context-menu__close" onClick={closeContextMenu} aria-label="Закрыть меню">
+                    ✕
+                  </button>
+                </div>
+                {isMenuBusy && (
+                  <div className="context-menu__hint" role="status" aria-live="polite">
+                    Сохранение...
+                  </div>
+                )}
+                <div className="context-menu-sheet__content">
+                  {derivedStatusOptions.map(section => {
+                    const optionsId = contextMenuState.order
+                      ? `context-menu-options-${contextMenuState.order._id}-${section.key}`
+                      : `context-menu-options-${section.key}`;
+                    return (
+                      <details key={section.key} className="context-menu-accordion" defaultOpen>
+                        <summary aria-controls={optionsId}>{section.label}</summary>
+                        <div
+                          className="context-menu-accordion__options"
+                          id={optionsId}
+                          role="radiogroup"
+                          aria-label={`Статусы для ${section.label}`}
+                        >
+                          {section.options.map(option => {
+                            const isActive = String(contextMenuState.order[section.key] ?? '').toLowerCase() === String(option).toLowerCase();
+                            return (
+                              <button
+                                key={option}
+                                type="button"
+                                className={`context-menu-option ${isActive ? 'active' : ''}`}
+                                onClick={() => handleStatusChange(contextMenuState.order, section.key, option, { label: section.label })}
+                                disabled={isMenuBusy}
+                                role="radio"
+                                aria-checked={isActive}
+                                aria-disabled={isMenuBusy}
+                              >
+                                {option}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </details>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        ) : (
+          createPortal(
+            <div
+              className="context-menu"
+              ref={contextMenuRef}
+              tabIndex={-1}
+              role="menu"
+              aria-labelledby={menuTitleId}
+              aria-busy={isMenuBusy}
+              style={{
+                top: contextMenuState.y,
+                left: contextMenuState.x
+              }}
+            >
+              <div className="context-menu__title" id={menuTitleId}>
+                {menuTitle}
+              </div>
+              {isMenuBusy && (
+                <div className="context-menu__hint" role="status" aria-live="polite">
+                  Сохранение...
+                </div>
+              )}
+              {derivedStatusOptions.map(section => {
+                const optionsId = contextMenuState.order
+                  ? `context-menu-options-${contextMenuState.order._id}-${section.key}`
+                  : `context-menu-options-${section.key}`;
+                return (
+                  <div key={section.key} className="context-menu__item" role="presentation">
+                    <div className="context-menu__item-label">{section.label}</div>
+                    <div className="context-menu__submenu" role="group" aria-label={`Статусы для ${section.label}`} id={optionsId}>
+                      {section.options.map(option => {
+                        const isActive = String(contextMenuState.order[section.key] ?? '').toLowerCase() === String(option).toLowerCase();
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            className={`context-menu-option ${isActive ? 'active' : ''}`}
+                            onClick={() => handleStatusChange(contextMenuState.order, section.key, option, { closeAfter: true, label: section.label })}
+                            disabled={isMenuBusy}
+                            role="menuitemradio"
+                            aria-checked={isActive}
+                            aria-disabled={isMenuBusy}
+                          >
+                            {option}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>,
+            document.body
+          )
+        )
+      )}
     </div>
   );
 }

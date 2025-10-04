@@ -795,3 +795,218 @@ p {
     z-index: 1000;
   }
 } 
+/* Контекстное меню статусов */
+.context-menu {
+  position: fixed;
+  min-width: 280px;
+  max-width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+  padding: 12px 16px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeInScale var(--duration-fast) ease-out;
+}
+
+.context-menu__title {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--color-text);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding-bottom: 8px;
+}
+
+.context-menu__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.context-menu__item-label {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.context-menu__submenu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.context-menu-option {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #f8f9fb;
+  color: var(--color-text);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
+}
+
+.context-menu-option:hover,
+.context-menu-option:focus {
+  background: var(--color-primary);
+  color: #fff;
+  outline: none;
+}
+
+.context-menu-option.active {
+  background: var(--color-primary);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+
+.context-menu-option:disabled,
+.context-menu-option[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.context-menu-option:disabled:hover,
+.context-menu-option:disabled:focus,
+.context-menu-option[aria-disabled="true"]:hover,
+.context-menu-option[aria-disabled="true"]:focus {
+  background: #f8f9fb;
+  color: var(--color-text);
+}
+
+.context-menu-option.active:disabled,
+.context-menu-option.active[aria-disabled="true"] {
+  background: var(--color-primary);
+  color: #fff;
+  opacity: 0.75;
+}
+
+.context-menu__hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
+}
+
+.context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 26, 38, 0.4);
+  z-index: 1100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn var(--duration-fast) ease-out;
+}
+
+.context-menu-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: #ffffff;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.2);
+  padding: 18px 20px 28px;
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: slideUp var(--duration-normal) var(--ease-standard);
+}
+
+.context-menu-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  color: var(--color-text);
+}
+
+.context-menu-sheet__subtitle {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+}
+
+.context-menu__close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+.context-menu-sheet__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.context-menu-accordion {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: #fafbfc;
+}
+
+.context-menu-accordion > summary {
+  list-style: none;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.context-menu-accordion > summary::-webkit-details-marker {
+  display: none;
+}
+
+.context-menu-accordion[open] > summary::after {
+  content: '−';
+}
+
+.context-menu-accordion:not([open]) > summary::after {
+  content: '+';
+}
+
+.context-menu-accordion__options {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

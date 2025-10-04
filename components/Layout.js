@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import { useAuth0 } from '@auth0/auth0-react';
 // import dynamic from 'next/dynamic'; // <--- Комментируем динамический импорт
 import DataTable from './DataTable';    // <--- Добавляем статический импорт
@@ -96,18 +97,20 @@ export default function Layout({ isAuthenticated, user }) {
   // Функция для обновления статуса заказа через DataTable - также мемоизируем, если она использует состояния Layout
   // В данном случае она использует dataTableRef, который стабилен, и не использует состояния Layout, которые меняются
   // Но для хорошей практики, если бы она зависела от чего-то из Layout, мы бы добавили это в зависимости.
-  const handleOrderStatusUpdate = useCallback(async (orderId, fieldsToUpdate) => {
+  const handleOrderStatusUpdate = useCallback(async (orderId, fieldsToUpdate, options = {}) => {
     console.log('handleOrderStatusUpdate called for orderId:', orderId, 'Fields:', fieldsToUpdate);
     console.log('dataTableRef.current in handleOrderStatusUpdate:', dataTableRef.current);
     if (dataTableRef.current && typeof dataTableRef.current.updateOrderFields === 'function') {
       try {
-        await dataTableRef.current.updateOrderFields(orderId, fieldsToUpdate);
+        await dataTableRef.current.updateOrderFields(orderId, fieldsToUpdate, options);
         console.log(`Order ${orderId} status update triggered with fields:`, fieldsToUpdate);
       } catch (error) {
         console.error('Error triggering order status update:', error);
+        throw error;
       }
     } else {
       console.warn('DataTable ref or updateOrderFields method not available.');
+      throw new Error('DataTable not available for status update');
     }
   }, []); // dataTableRef стабилен, поэтому массив зависимостей пуст
 
@@ -123,7 +126,7 @@ export default function Layout({ isAuthenticated, user }) {
         };
         
         // Добавляем таймаут в 20 секунд
-        const updatePromise = dataTableRef.current.updateOrderFields(order._id, fieldsToUpdate);
+        const updatePromise = dataTableRef.current.updateOrderFields(order._id, fieldsToUpdate, { immediate: true });
         const timeoutPromise = new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Update timeout')), 20000)
         );
@@ -238,10 +241,13 @@ export default function Layout({ isAuthenticated, user }) {
                 <div className="user-info">
                   <span className="user-name">{user.name || user.email}</span>
                   {user.picture && (
-                    <img 
-                      src={user.picture} 
-                      alt="User" 
+                    <Image
+                      src={user.picture}
+                      alt={user.name || user.email || 'User avatar'}
                       className="user-avatar"
+                      width={32}
+                      height={32}
+                      unoptimized
                     />
                   )}
                 </div>

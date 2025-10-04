@@ -191,9 +191,10 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
       }
       // Принудительно сохраняем pending изменения
       if (pendingChanges.current.length > 0) {
-        flushPendingChanges();
+        flushPendingChanges().catch(() => {});
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- выполняем инициализацию только один раз при монтировании
   }, []);
 
   // Обработка потери/возврата фокуса окна
@@ -221,6 +222,7 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- обработчик зависит от рефов и вспомогательных функций, которые намеренно не мемоизируются
   }, [pushEnabled]);
 
   // API запросы
@@ -238,7 +240,7 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
 
   // Дебаунсинг записей (batch операции)
   const flushPendingChanges = async () => {
-    if (pendingChanges.current.length === 0) return;
+    if (pendingChanges.current.length === 0) return true;
     
     const changesToFlush = [...pendingChanges.current]; // Копируем изменения для обработки
     pendingChanges.current = []; // Очищаем очередь
@@ -308,6 +310,8 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
       if (pendingChanges.current.length === 0) {
         setHasUnsavedChanges(false);
       }
+
+      return true;
     } catch (err) {
       console.error('Error in batch update:', err);
       // При ошибке возвращаем изменения обратно в очередь для повторной попытки
@@ -320,6 +324,8 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
       setTimeout(() => {
         loadData(false);
       }, 2000);
+
+      throw err;
     }
   };
 
@@ -596,7 +602,7 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
 
   // API для родительского компонента
   useImperativeHandle(ref, () => ({
-    updateOrderFields: (orderId, fieldsToUpdate) => {
+    updateOrderFields: (orderId, fieldsToUpdate, options = {}) => {
       console.log(`DataTable: updateOrderFields called for orderId: ${orderId}`, fieldsToUpdate);
       const rowIndex = data.findIndex(row => row._id === orderId);
       if (rowIndex === -1) {
@@ -619,15 +625,20 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
         clearTimeout(writeTimeoutRef.current);
       }
       
-      // Устанавливаем новый таймер или вызываем немедленно, если нужно
-      // Для одиночных обновлений статуса можно сделать задержку меньше или убрать
-      // Но для консистентности с пакетными правками из таблицы, оставим дебаунс
+      if (options.immediate) {
+        writeTimeoutRef.current = null;
+        return flushPendingChanges();
+      }
+
+      // Устанавливаем новый таймер для пакетного сохранения изменений
       writeTimeoutRef.current = setTimeout(() => {
-        flushPendingChanges();
-      }, WRITE_DEBOUNCE); // Используем существующий дебаунс
-      
+        writeTimeoutRef.current = null;
+        flushPendingChanges().catch(() => {});
+      }, WRITE_DEBOUNCE);
+
       return Promise.resolve();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- flushPendingChanges relies on refs for the latest queue and stays stable across renders
   }), [data]);
 
   if (loading) {
@@ -733,5 +744,7 @@ const DataTable = forwardRef(({ onOrdersChange }, ref) => {
     </div>
   );
 });
+
+DataTable.displayName = 'DataTable';
 
 export default DataTable;
