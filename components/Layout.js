@@ -241,13 +241,10 @@ export default function Layout({ isAuthenticated, user }) {
                 <div className="user-info">
                   <span className="user-name">{user.name || user.email}</span>
                   {user.picture && (
-                    <Image
+                    <img
                       src={user.picture}
-                      alt={user.name || user.email || 'User avatar'}
+                      alt="User"
                       className="user-avatar"
-                      width={32}
-                      height={32}
-                      unoptimized
                     />
                   )}
                 </div>
