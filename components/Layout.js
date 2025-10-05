@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import Image from 'next/image';
 import { useAuth0 } from '@auth0/auth0-react';
 // import dynamic from 'next/dynamic'; // <--- Комментируем динамический импорт
 import DataTable from './DataTable';    // <--- Добавляем статический импорт

@@ -3,6 +3,7 @@ import Head from 'next/head';
 import '../styles/globals.css';
 
 export default function App({ Component, pageProps }) {
+  const redirectUri = process.env.NEXT_PUBLIC_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
   return (
     <>
       <Head>
@@ -12,7 +13,7 @@ export default function App({ Component, pageProps }) {
         domain={process.env.AUTH0_ISSUER_BASE_URL?.replace('https://', '')}
         clientId={process.env.AUTH0_CLIENT_ID}
         authorizationParams={{
-          redirect_uri: typeof window !== 'undefined' ? window.location.origin : '',
+          redirect_uri: redirectUri,
           audience: `https://${process.env.AUTH0_ISSUER_BASE_URL?.replace('https://', '')}/api/v2/`,
           scope: 'openid profile email'
         }}
