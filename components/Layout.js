@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
-// import dynamic from 'next/dynamic'; // <--- Комментируем динамический импорт
-import DataTable from './DataTable';    // <--- Добавляем статический импорт
+import dynamic from 'next/dynamic'; // <--- Комментируем динамический импорт
+// import DataTable from './DataTable';    // <--- Добавляем статический импорт
 import KanbanBoard from './KanbanBoard';
 // import React from 'react'; // <--- УДАЛЯЕМ ЭТОТ ЛИШНИЙ ИМПОРТ
 
 // Динамический импорт DataTable
-/* // <--- Комментируем блок dynamic
+// <--- Комментируем блок dynamic
 const DataTable = dynamic(() => import('./DataTable'), {
   ssr: false
 });
-*/
+//*/
 
 // Функция для генерации дней на основе заказов (как в next-5.md)
 function initializeDays(orders = []) {
