@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import OrderContextMenu from './OrderContextMenu';
 
@@ -419,12 +419,31 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
   };
 
   // Обработчик изменения статуса из контекстного меню
-  const handleStatusChange = (property, newStatus) => {
-    if (!onOrderStatusUpdate || !contextMenu.order) return;
+  const handleStatusChange = useCallback((property, newStatus) => {
+    console.log('handleStatusChange called:', { property, newStatus, currentOrder: contextMenu.order });
+
+    if (!onOrderStatusUpdate) {
+      console.error('onOrderStatusUpdate is not provided');
+      return;
+    }
+
+    // Сохраняем ссылку на заказ ДО закрытия меню
+    const orderToUpdate = contextMenu.order;
+
+    if (!orderToUpdate) {
+      console.error('No order available for status update');
+      return;
+    }
 
     const fieldsToUpdate = { [property]: newStatus };
-    onOrderStatusUpdate(contextMenu.order._id, fieldsToUpdate);
-  };
+    console.log('Calling onOrderStatusUpdate with:', {
+      orderId: orderToUpdate._id,
+      fieldsToUpdate
+    });
+
+    // Вызываем обновление с сохраненной ссылкой на заказ
+    onOrderStatusUpdate(orderToUpdate._id, fieldsToUpdate);
+  }, [contextMenu.order, onOrderStatusUpdate]);
 
   return (
     <div

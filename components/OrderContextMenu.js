@@ -188,9 +188,13 @@ export default function OrderContextMenu({
 
   const handleStatusClick = (property, status) => {
     const columnName = PROPERTY_COLUMN_MAP[property] || property;
-    onStatusChange(columnName, status);
+    console.log('OrderContextMenu: handleStatusClick called', { property, columnName, status, order });
+
     setIsSubmenuPinned(false); // Сбрасываем фиксацию
-    onClose();
+    onClose(); // Закрываем меню сразу
+
+    // Вызываем callback после закрытия (order еще доступен из props)
+    onStatusChange(columnName, status);
   };
 
   // Позиционирование меню с учетом границ экрана
