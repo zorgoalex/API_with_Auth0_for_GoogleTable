@@ -24,9 +24,12 @@
 - components/Layout.js — оболочка рабочего стола: управляет навигацией между таблицей, канбаном и настройками, хранит общий список заказов и вычисляет набор дат для доски.
 - components/DataTable.js — Handsontable-обёртка. Подтягивает данные из /api/sheet, ведёт очередь отложенных изменений, создаёт/удаляет строки, выставляет высоту таблицы, управляет push/SSE и fallback polling.
 - components/KanbanBoard.js — визуализация заказов по дням. Показывает статусы, материалы, подсчитывает суммарную площадь, поддерживает drag&drop и оптимистичные обновления, вызывает методы Layout для записи в таблицу.
-- lib/google-sheets.js — доступ к Google Sheet через сервисный аккаунт: чтение всех строк, добавление, обновление (по owNumber) и удаление.
-- lib/auth.js — проверка JWT от Auth0, в том числе через JWKS, и утилита equireAuth для API-роутов.
-- pages/api/sheet.js — REST CRUD для таблицы (GET/POST/PUT/DELETE). Все запросы защищены equireAuth.
+- lib/google-sheets.js — доступ к Google Sheet через сервисный аккаунт: чтение всех строк, добавление, обновление (по 
+owNumber) и удаление.
+- lib/auth.js — проверка JWT от Auth0, в том числе через JWKS, и утилита 
+equireAuth для API-роутов.
+- pages/api/sheet.js — REST CRUD для таблицы (GET/POST/PUT/DELETE). Все запросы защищены 
+equireAuth.
 - pages/api/setup-push.js — настройка drive.files.watch, проверяет окружение, создаёт канал на Google Drive и возвращает информацию о вебхуке.
 - pages/api/webhook/drive-changes.js — точка приёма push-уведомлений от Google и SSE-эндпоинт для клиентов. Рассылает события всем подключённым браузерам.
 - pages/index.js, _app.js, _document.js — корневые страницы и провайдер Auth0.
@@ -132,3 +135,8 @@ docs/
 - `npm run build` — сборка production.
 - `npm start` — запуск production-сборки.
 - `npm run lint` — проверка линтером.
+
+# Git Workflow development
+branch main -  production
+branch stage - stage
+
