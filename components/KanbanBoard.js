@@ -61,6 +61,28 @@ function capitalizeFirst(str) {
   return str[0].toUpperCase() + str.slice(1).toLowerCase();
 }
 
+// Статусы производственного процесса (в порядке технологического процесса)
+const PRODUCTION_STAGES = [
+  { key: 'Закуп пленки', abbr: 'З', tooltip: 'Закуп пленки' },
+  { key: 'Распил', abbr: 'Р', tooltip: 'Распил' },
+  { key: 'Шлифовка', abbr: 'Ш', tooltip: 'Шлифовка' },
+  { key: 'Пленка', abbr: 'П', tooltip: 'Пленка' },
+  { key: 'Упаковка', abbr: 'У', tooltip: 'Упаковка' }
+];
+
+// Определение цвета и стиля индикатора статуса
+// backgroundColor - цвет фона карточки, чтобы скрыть неактивные индикаторы
+function getProductionStageStyle(status, backgroundColor = '#ffffff') {
+  if (!status || status === '-') {
+    return { color: backgroundColor, fontWeight: 600 }; // Цвет = цвет фона (невидимый)
+  }
+  const statusLower = String(status).toLowerCase().trim();
+  if (statusLower === 'готов') {
+    return { color: '#ff6f00', fontWeight: 700 }; // Оранжевый + жирный - готов
+  }
+  return { color: backgroundColor, fontWeight: 600 }; // Дефолт - невидимый
+}
+
 export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdate, onOrderMove }) {
   const { getAccessTokenSilently } = useAuth0();
   const [containerWidth, setContainerWidth] = useState(1200);
@@ -740,8 +762,8 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                             </div>
                             
                             {/* Дополнительная информация */}
-                            <div style={{ 
-                              fontSize: isMobile ? 9 : 12, 
+                            <div style={{
+                              fontSize: isMobile ? 9 : 12,
                               color: '#888',
                               lineHeight: 1.2
                             }}>
@@ -760,6 +782,64 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                                 </>
                               )}
                             </div>
+
+                            {/* Индикаторы статусов производства */}
+                            {(() => {
+                              // Проверяем, все ли 5 статусов в "Готов"
+                              const allReady = PRODUCTION_STAGES.every(stage => {
+                                const status = order[stage.key] || '-';
+                                return String(status).toLowerCase().trim() === 'готов';
+                              });
+
+                              // Определяем цвет фона карточки для скрытия неактивных индикаторов
+                              const cardBackground = (() => {
+                                if (isPending) return '#f5f5f5';
+                                if (String(order["Номер заказа"] || '').startsWith('К')) {
+                                  return isIssued ? '#f5f0e6' : '#faf7f0';
+                                }
+                                return isIssued ? '#f8f9fa' : '#ffffff';
+                              })();
+
+                              return (
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  marginTop: isMobile ? 4 : 6,
+                                  paddingTop: isMobile ? 4 : 6,
+                                  borderTop: allReady ? 'none' : '1px solid #e0e0e0',
+                                  justifyContent: 'space-around',
+                                  width: 'calc(100% + 12px)',
+                                  marginLeft: '-6px',
+                                  marginRight: '-6px',
+                                  background: allReady ? '#ffd9bf' : 'transparent', // Очень светло-оранжевый
+                                  borderRadius: allReady ? (isMobile ? 4 : 5) : 0,
+                                  padding: allReady ? `${isMobile ? 5 : 6}px ${isMobile ? 8 : 10}px` : `${isMobile ? 4 : 6}px 0 0 0`
+                                }}>
+                                  {PRODUCTION_STAGES.map(stage => {
+                                    const status = order[stage.key] || '-';
+                                    const style = allReady
+                                      ? { color: '#e0a882', fontWeight: 700 } // Чуть темнее полоски
+                                      : getProductionStageStyle(status, cardBackground);
+                                    return (
+                                      <span
+                                        key={stage.key}
+                                        title={`${stage.tooltip}: ${status}`}
+                                        style={{
+                                          fontSize: isMobile ? 10 : 12,
+                                          fontWeight: style.fontWeight,
+                                          color: style.color,
+                                          lineHeight: 1,
+                                          cursor: 'default',
+                                          userSelect: 'none'
+                                        }}
+                                      >
+                                        {stage.abbr}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
