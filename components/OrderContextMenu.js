@@ -142,7 +142,7 @@ export default function OrderContextMenu({
     event.stopPropagation();
 
     if (isMobile) {
-      // Мобильная логика (как было)
+      // Мобильная логика
       if (activeSubmenu === property) {
         setActiveSubmenu(null);
         return;
@@ -150,10 +150,23 @@ export default function OrderContextMenu({
 
       const rect = event.currentTarget.getBoundingClientRect();
       setActiveSubmenu(property);
-      setSubmenuPosition({
-        x: position.x,
-        y: rect.bottom + 5
-      });
+
+      // Проверяем, сколько места есть снизу
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const estimatedSubmenuHeight = 300; // примерная высота подменю
+
+      // Если места снизу мало, показываем подменю сверху от элемента
+      if (spaceBelow < estimatedSubmenuHeight) {
+        setSubmenuPosition({
+          x: position.x,
+          y: Math.max(10, rect.top - estimatedSubmenuHeight - 10) // 10px отступ от верха экрана
+        });
+      } else {
+        setSubmenuPosition({
+          x: position.x,
+          y: rect.bottom + 5
+        });
+      }
     } else {
       // Desktop логика: клик фиксирует подменю
       if (activeSubmenu === property && isSubmenuPinned) {
@@ -271,10 +284,10 @@ export default function OrderContextMenu({
                   }}
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <div style={{ fontWeight: 500 }}>{property}</div>
+                    <div style={{ fontWeight: 500, color: '#424242' }}>{property}</div>
                     <div style={{
                       fontSize: isMobile ? 13 : 12,
-                      color: '#666',
+                      color: '#757575',
                       fontStyle: currentValue === '-' ? 'italic' : 'normal'
                     }}>
                       {currentValue}
@@ -392,7 +405,7 @@ export default function OrderContextMenu({
                       if (!isSelected) e.currentTarget.style.background = 'white';
                     }}
                   >
-                    <span>{status}</span>
+                    <span style={{ color: '#1976d2', fontWeight: 500 }}>{status}</span>
                     {isSelected && (
                       <span style={{
                         color: '#1976d2',
