@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
+import OrderContextMenu from './OrderContextMenu';
 
 function formatDateUniversal(dateInput) {
   if (!dateInput) return '';
@@ -61,18 +62,75 @@ function capitalizeFirst(str) {
 }
 
 export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdate, onOrderMove }) {
+  const { getAccessTokenSilently } = useAuth0();
   const [containerWidth, setContainerWidth] = useState(1200);
   const [draggedOrder, setDraggedOrder] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [optimisticOrders, setOptimisticOrders] = useState([]); // Локальная копия заказов для оптимистичных обновлений
   const [pendingMoves, setPendingMoves] = useState(new Set()); // Отслеживание заказов в процессе перемещения
   const [notification, setNotification] = useState(null); // Уведомления об ошибках
+  const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, order: null });
+  const [availableStatuses, setAvailableStatuses] = useState({}); // Доступные статусы из Google Sheets
   const containerRef = useRef(null);
   const columnRefs = useRef({});
   
   // Используем оптимистичные заказы, если они есть, иначе исходные
   const currentOrders = optimisticOrders.length > 0 ? optimisticOrders : orders;
   const ordersMap = groupOrdersByDate(currentOrders);
+
+  // Загрузка доступных статусов при монтировании
+  useEffect(() => {
+    const fetchStatuses = async () => {
+      try {
+        const token = await getAccessTokenSilently();
+        const response = await fetch('/api/sheet/statuses', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableStatuses(data);
+          console.log('Loaded statuses:', data);
+        } else {
+          console.error('Failed to load statuses:', response.status);
+          // Fallback на жестко закодированные статусы
+          setAvailableStatuses({
+            'Фрезеровка': ['Модерн', 'Фрезеровка', 'Черновой', 'Выборка', 'Краска'],
+            'Оплата': ['не оплачен', 'в долг', 'частично', 'оплачен', 'за счет фирмы'],
+            'Статус': ['Готов', 'Выдан', 'Распилен', '-'],
+            'Отрисован': ['Отрисован', '-'],
+            'Материал': ['16мм', '18мм', '8мм', '10мм', 'ЛДСП'],
+            'Закуп пленки': ['Готов', '-'],
+            'Распил': ['Готов', '-'],
+            'Шлифовка': ['Готов', '-'],
+            'Пленка': ['Готов', '-'],
+            'Упаковка': ['Готов', '-'],
+            'Выдан': ['Готов', '-'],
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching statuses:', error);
+        // Fallback на жестко закодированные статусы
+        setAvailableStatuses({
+          'Фрезеровка': ['Модерн', 'Фрезеровка', 'Черновой', 'Выборка', 'Краска'],
+          'Оплата': ['не оплачен', 'в долг', 'частично', 'оплачен', 'за счет фирмы'],
+          'Статус': ['Готов', 'Выдан', 'Распилен', '-'],
+          'Отрисован': ['Отрисован', '-'],
+          'Материал': ['16мм', '18мм', '8мм', '10мм', 'ЛДСП'],
+          'Закуп пленки': ['Готов', '-'],
+          'Распил': ['Готов', '-'],
+          'Шлифовка': ['Готов', '-'],
+          'Пленка': ['Готов', '-'],
+          'Упаковка': ['Готов', '-'],
+          'Выдан': ['Готов', '-'],
+        });
+      }
+    };
+
+    fetchStatuses();
+  }, [getAccessTokenSilently]);
 
   // Синхронизируем оптимистичные заказы с реальными
   useEffect(() => {
@@ -82,12 +140,12 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
         if (prevOptimistic.length === 0) {
           return orders;
         }
-        
+
         // Если есть pending операции - игнорируем обновления полностью
         if (pendingMoves.size > 0) {
           return prevOptimistic; // Возвращаем текущие оптимистичные данные без изменений
         }
-        
+
         // Нет pending операций - безопасно обновляем все
         return orders;
       });
@@ -219,7 +277,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
   const handleDrop = async (e, targetDate) => {
     e.preventDefault();
     setDragOverColumn(null);
-    
+
     if (!draggedOrder || !onOrderMove) {
       console.log('No dragged order or onOrderMove handler');
       return;
@@ -227,7 +285,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
 
     const { order, sourceDate } = draggedOrder;
     const formattedTargetDate = formatDateUniversal(targetDate);
-    
+
     if (sourceDate === formattedTargetDate) {
       console.log('Same date, no move needed');
       return;
@@ -240,7 +298,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
     });
 
     const orderId = order._id || order["Номер заказа"];
-    
+
     // Оптимистичное обновление - сразу перемещаем карточку
     setOptimisticOrders(prevOrders => {
       return prevOrders.map(o => {
@@ -256,7 +314,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
 
     // Помечаем заказ как находящийся в процессе обновления (кратковременно)
     setPendingMoves(prev => new Set([...prev, orderId]));
-    
+
     // Убираем спиннер через короткое время (визуальная обратная связь)
     setTimeout(() => {
       setPendingMoves(prev => {
@@ -273,10 +331,10 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
       })
       .catch((error) => {
         console.error('Error moving order:', error);
-        
+
         // Различаем таймауты и реальные ошибки
         const isTimeout = error.message.includes('timeout') || error.message.includes('Update timeout');
-        
+
         if (isTimeout) {
           // Таймаут - возможно операция все еще выполняется, НЕ откатываем
           showNotification(`Таймаут обновления заказа ${order["Номер заказа"]}. Проверьте результат в таблице.`, 'warning');
@@ -293,11 +351,57 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
               return o;
             });
           });
-          
+
           showNotification(`Ошибка перемещения заказа ${order["Номер заказа"]}: ${error.message}`, 'error');
           console.warn('Карточка возвращена на исходное место из-за ошибки API');
         }
       });
+  };
+
+  // Обработчик открытия контекстного меню (ПКМ на desktop)
+  const handleContextMenu = (e, order) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setContextMenu({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      order: order
+    });
+  };
+
+  // Обработчик двойного тапа (мобильные устройства)
+  const [lastTap, setLastTap] = useState(0);
+  const handleDoubleTap = (e, order) => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300; // 300мс для двойного тапа
+
+    if (now - lastTap < DOUBLE_TAP_DELAY) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Открываем меню по центру экрана для мобильных
+      setContextMenu({
+        isOpen: true,
+        position: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+        order: order
+      });
+    }
+
+    setLastTap(now);
+  };
+
+  // Закрытие контекстного меню
+  const handleCloseContextMenu = () => {
+    setContextMenu({ isOpen: false, position: { x: 0, y: 0 }, order: null });
+  };
+
+  // Обработчик изменения статуса из контекстного меню
+  const handleStatusChange = (property, newStatus) => {
+    if (!onOrderStatusUpdate || !contextMenu.order) return;
+
+    const fieldsToUpdate = { [property]: newStatus };
+    onOrderStatusUpdate(contextMenu.order._id, fieldsToUpdate);
   };
 
   return (
@@ -465,6 +569,8 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                             draggable={!isPending}
                             onDragStart={(e) => handleDragStart(e, order, key)}
                             onDragEnd={handleDragEnd}
+                            onContextMenu={(e) => handleContextMenu(e, order)}
+                            onTouchStart={(e) => handleDoubleTap(e, order)}
                             style={{
                               border: isReady ? '2px solid #4caf50' : '1px solid #c0c0c0',
                               borderRadius: isMobile ? 5 : 7,
@@ -665,6 +771,17 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
           ))}
         </div>
       </div>
+
+      {/* Контекстное меню для редактирования статусов заказа */}
+      <OrderContextMenu
+        isOpen={contextMenu.isOpen}
+        position={contextMenu.position}
+        order={contextMenu.order}
+        statuses={availableStatuses}
+        onClose={handleCloseContextMenu}
+        onStatusChange={handleStatusChange}
+        isMobile={isMobile}
+      />
     </div>
   );
 }
