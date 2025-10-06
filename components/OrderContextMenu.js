@@ -5,7 +5,7 @@ const PROPERTY_ORDER = [
   'Фрезеровка',
   'Оплата',
   'Статус',
-  'Отрисован',
+  'CAD файлы',
   'Материал',
   'Закуп пленки',
   'Распил',
@@ -17,7 +17,7 @@ const PROPERTY_ORDER = [
 
 // Маппинг отображаемых имен на имена колонок в таблице
 const PROPERTY_COLUMN_MAP = {
-  'CAD файлы': 'Отрисован',
+  // Если отображаемое имя отличается от названия колонки в таблице
 };
 
 /**
@@ -41,6 +41,7 @@ export default function OrderContextMenu({
 }) {
   const [activeSubmenu, setActiveSubmenu] = useState(null);
   const [submenuPosition, setSubmenuPosition] = useState({ x: 0, y: 0 });
+  const [isSubmenuPinned, setIsSubmenuPinned] = useState(false); // Зафиксировано ли подменю кликом
   const menuRef = useRef(null);
   const submenuRef = useRef(null);
 
@@ -117,39 +118,65 @@ export default function OrderContextMenu({
   });
 
   const handlePropertyHover = (property, event) => {
-    if (isMobile) return; // На мобильных hover не работает
+    if (isMobile || isSubmenuPinned) return; // На мобильных hover не работает, если подменю зафиксировано - не меняем
 
     const rect = event.currentTarget.getBoundingClientRect();
     setActiveSubmenu(property);
     setSubmenuPosition({
-      x: rect.right + 5,
+      x: rect.right + 2, // Уменьшили зазор с 5px до 2px
       y: rect.top
     });
   };
 
-  const handlePropertyClick = (property, event) => {
-    if (!isMobile) return; // На desktop работает hover
+  const handlePropertyMouseLeave = () => {
+    if (isMobile || isSubmenuPinned) return; // Не скрываем, если зафиксировано
+    // Небольшая задержка перед скрытием, чтобы успеть навести на подменю
+    setTimeout(() => {
+      if (!isSubmenuPinned && !submenuRef.current?.matches(':hover')) {
+        setActiveSubmenu(null);
+      }
+    }, 100);
+  };
 
+  const handlePropertyClick = (property, event) => {
     event.stopPropagation();
 
-    if (activeSubmenu === property) {
-      setActiveSubmenu(null);
-      return;
+    if (isMobile) {
+      // Мобильная логика (как было)
+      if (activeSubmenu === property) {
+        setActiveSubmenu(null);
+        return;
+      }
+
+      const rect = event.currentTarget.getBoundingClientRect();
+      setActiveSubmenu(property);
+      setSubmenuPosition({
+        x: position.x,
+        y: rect.bottom + 5
+      });
+    } else {
+      // Desktop логика: клик фиксирует подменю
+      if (activeSubmenu === property && isSubmenuPinned) {
+        // Повторный клик - скрываем
+        setActiveSubmenu(null);
+        setIsSubmenuPinned(false);
+      } else {
+        // Первый клик - фиксируем
+        const rect = event.currentTarget.getBoundingClientRect();
+        setActiveSubmenu(property);
+        setIsSubmenuPinned(true);
+        setSubmenuPosition({
+          x: rect.right + 2,
+          y: rect.top
+        });
+      }
     }
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    setActiveSubmenu(property);
-
-    // На мобильных подменю показываем снизу
-    setSubmenuPosition({
-      x: isMobile ? position.x : rect.right + 5,
-      y: isMobile ? rect.bottom + 5 : rect.top
-    });
   };
 
   const handleStatusClick = (property, status) => {
     const columnName = PROPERTY_COLUMN_MAP[property] || property;
     onStatusChange(columnName, status);
+    setIsSubmenuPinned(false); // Сбрасываем фиксацию
     onClose();
   };
 
@@ -223,7 +250,7 @@ export default function OrderContextMenu({
                 <div
                   key={property}
                   onMouseEnter={(e) => handlePropertyHover(property, e)}
-                  onMouseLeave={() => !isMobile && setActiveSubmenu(null)}
+                  onMouseLeave={handlePropertyMouseLeave}
                   onClick={(e) => handlePropertyClick(property, e)}
                   style={{
                     padding: isMobile ? '14px 16px' : '10px 12px',
@@ -271,6 +298,18 @@ export default function OrderContextMenu({
       {activeSubmenu && (
         <div
           ref={submenuRef}
+          onMouseEnter={() => {
+            // Когда наводим на подменю, не скрываем его
+            if (!isMobile) {
+              setActiveSubmenu(activeSubmenu);
+            }
+          }}
+          onMouseLeave={() => {
+            // Когда уходим с подменю, скрываем его (если не зафиксировано)
+            if (!isMobile && !isSubmenuPinned) {
+              setActiveSubmenu(null);
+            }
+          }}
           style={{
             position: 'fixed',
             left: submenuPosition.x,
