@@ -12,10 +12,12 @@ export default function App({ Component, pageProps }) {
       <Auth0Provider
         domain={process.env.AUTH0_ISSUER_BASE_URL?.replace('https://', '')}
         clientId={process.env.AUTH0_CLIENT_ID}
+        useRefreshTokens={true}
+        cacheLocation="localstorage"
         authorizationParams={{
           redirect_uri: redirectUri,
           audience: `https://${process.env.AUTH0_ISSUER_BASE_URL?.replace('https://', '')}/api/v2/`,
-          scope: 'openid profile email'
+          scope: 'openid profile email offline_access'
         }}
       >
         <Component {...pageProps} />

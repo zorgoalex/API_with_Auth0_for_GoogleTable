@@ -44,7 +44,6 @@
 - **pages/api/webhook/drive-changes.js** — точка приёма push-уведомлений от Google и SSE-эндпоинт для клиентов. Рассылает события всем подключённым браузерам.
 - **pages/index.js, _app.js, _document.js** — корневые страницы и провайдер Auth0.
 - **styles/globals.css** — единый стиль интерфейса (светлая/тёмная тема, состояния drag&drop и т.д.).
-- **ai_docs/** — документация по разработке и внедрению новых функций (Status_menu_v2_Implementation.md, Google Sheets Api Quota.md, Setting push Google Drive…md).
 
 ## Переменные окружения
 
