@@ -176,7 +176,7 @@ export default function Layout({ isAuthenticated, user }) {
 
   const titles = {
     'table': 'Таблица',
-    'kanban': 'Канбан',
+    'kanban': 'Производственный календарь',
     'settings': 'Проекты'
   };
 
