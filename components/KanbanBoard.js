@@ -2,18 +2,72 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useAuth0 } from '@auth0/auth0-react';
 import OrderContextMenu from './OrderContextMenu';
 
+const MS_IN_DAY = 86400000;
+const EXCEL_EPOCH_OFFSET = 25569; // 1899-12-30
+
+const normalizeText = (value = '') =>
+  String(value).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+
+const normalizeColumnName = (name = '') => normalizeText(name).toLowerCase();
+
+function coerceToDate(dateInput) {
+  if (dateInput instanceof Date) {
+    return new Date(dateInput.getTime());
+  }
+
+  if (typeof dateInput === 'number' && Number.isFinite(dateInput)) {
+    if (dateInput > 100000000000) {
+      return new Date(dateInput);
+    }
+
+    if (dateInput > 60 && dateInput < 6000000) {
+      const ms = Math.round((dateInput - EXCEL_EPOCH_OFFSET) * MS_IN_DAY);
+      return new Date(ms);
+    }
+  }
+
+  if (typeof dateInput === 'string') {
+    const sanitized = normalizeText(dateInput);
+    if (!sanitized) return null;
+
+    const dateMatch = sanitized.match(/^(\d{2}\.\d{2}\.\d{4})/);
+    if (dateMatch) {
+      const [day, month, year] = dateMatch[1].split('.');
+      const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+      if (!isNaN(parsed)) return parsed;
+      return null;
+    }
+
+    const numericValue = Number(sanitized);
+    if (!Number.isNaN(numericValue)) {
+      return coerceToDate(numericValue);
+    }
+
+    const parsed = new Date(sanitized);
+    if (!isNaN(parsed)) return parsed;
+  }
+
+  return null;
+}
+
 function formatDateUniversal(dateInput) {
-  if (!dateInput) return '';
+  if (dateInput === undefined || dateInput === null || dateInput === '') return '';
   if (typeof dateInput === 'string' && dateInput.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
     return dateInput;
   }
-  const d = new Date(dateInput);
-  if (isNaN(d.getTime())) return String(dateInput);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
+
+  const coerced = coerceToDate(dateInput);
+  if (!coerced || isNaN(coerced.getTime())) {
+    return typeof dateInput === 'string' ? normalizeText(dateInput) : '';
+  }
+
+  const day = String(coerced.getDate()).padStart(2, '0');
+  const month = String(coerced.getMonth() + 1).padStart(2, '0');
+  const year = coerced.getFullYear();
   return `${day}.${month}.${year}`;
 }
+
+const NORMALIZED_PLANNED_DATE_KEY = normalizeColumnName('Планируемая дата выдачи');
 
 const WEEKDAYS = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
 function getDayName(date) {
@@ -39,11 +93,29 @@ function groupOrdersByDate(orders) {
   }
   const map = {};
   for (const order of orders) {
-    const key = formatDateUniversal(order["Планируемая дата выдачи"]);
+    const key = formatDateUniversal(getPlannedDateValue(order));
     if (!map[key]) map[key] = [];
     map[key].push(order);
   }
   return map;
+}
+
+function resolvePlannedDateColumn(order) {
+  if (!order || typeof order !== 'object') {
+    return 'Планируемая дата выдачи';
+  }
+
+  const matchedKey = Object.keys(order).find(
+    (key) => normalizeColumnName(key) === NORMALIZED_PLANNED_DATE_KEY
+  );
+
+  return matchedKey || 'Планируемая дата выдачи';
+}
+
+function getPlannedDateValue(order) {
+  if (!order) return '';
+  const column = resolvePlannedDateColumn(order);
+  return order[column];
 }
 
 function getStatusColor(status) {
@@ -307,6 +379,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
 
     const { order, sourceDate } = draggedOrder;
     const formattedTargetDate = formatDateUniversal(targetDate);
+    const plannedDateColumn = resolvePlannedDateColumn(order);
 
     if (sourceDate === formattedTargetDate) {
       console.log('Same date, no move needed');
@@ -327,7 +400,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
         if ((o._id && o._id === order._id) || o["Номер заказа"] === order["Номер заказа"]) {
           return {
             ...o,
-            "Планируемая дата выдачи": formattedTargetDate
+            [plannedDateColumn]: formattedTargetDate
           };
         }
         return o;
@@ -347,7 +420,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
     }, 500); // 0.5 секунды
 
     // Вызываем реальное обновление в источнике БЕЗ ожидания (fire-and-forget)
-    onOrderMove(order, sourceDate, formattedTargetDate)
+    onOrderMove(order, sourceDate, formattedTargetDate, plannedDateColumn)
       .then(() => {
         console.log('Order move completed successfully');
       })
@@ -367,7 +440,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
               if ((o._id && o._id === order._id) || o["Номер заказа"] === order["Номер заказа"]) {
                 return {
                   ...o,
-                  "Планируемая дата выдачи": sourceDate // Возвращаем исходную дату
+                  [plannedDateColumn]: sourceDate // Возвращаем исходную дату
                 };
               }
               return o;
@@ -602,6 +675,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                         const isReady = String(order["Статус"] ?? '').toLowerCase() === 'готов';
                         const orderId = order._id || order["Номер заказа"];
                         const isPending = pendingMoves.has(orderId);
+                        const plannedDateDisplay = getPlannedDateValue(order);
                         
                         return (
                           <div
@@ -786,7 +860,7 @@ export default function KanbanBoard({ orders = [], days = [], onOrderStatusUpdat
                               color: '#888',
                               lineHeight: 1.2
                             }}>
-                              {order["Планируемая дата выдачи"] ? `${order["Планируемая дата выдачи"]} • ` : ''}
+                              {plannedDateDisplay ? `${plannedDateDisplay} • ` : ''}
                               {order["Клиент"] || ''}
                               {order["Оплата"] && (
                                 <>

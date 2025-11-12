@@ -55,7 +55,7 @@ function initializeDays(orders = []) {
 }
 
 export default function Layout({ isAuthenticated, user }) {
-  const { logout } = useAuth0();
+  const { logout, getAccessTokenSilently } = useAuth0();
   const [currentView, setCurrentView] = useState('kanban');
   const [sidebarOpen, setSidebarOpen] = useState(false); // для мобильных
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // для десктопа - по умолчанию свернут
@@ -68,6 +68,42 @@ export default function Layout({ isAuthenticated, user }) {
     setGeneratedDays(initializeDays([])); 
   }, []);
 
+  // Независимая загрузка заказов для Kanban, чтобы не зависеть от рендера таблицы
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    let isMounted = true;
+
+    const preloadOrdersForKanban = async () => {
+      try {
+        const token = await getAccessTokenSilently();
+        const response = await fetch('/api/sheet', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to preload orders: ${response.status}`);
+        }
+
+        const rows = await response.json();
+        
+        if (isMounted && Array.isArray(rows) && rows.length > 0) {
+          setAllOrders((prev) => (prev.length === 0 ? rows : prev));
+        }
+      } catch (error) {
+        console.error('Prefetch orders for Kanban failed:', error);
+      }
+    };
+
+    preloadOrdersForKanban();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [getAccessTokenSilently, isAuthenticated]);
+
   // Пересчитываем дни при изменении заказов
   useEffect(() => {
     if (allOrders.length > 0) {
@@ -79,7 +115,7 @@ export default function Layout({ isAuthenticated, user }) {
   // Функция для обновления заказов из DataTable - теперь мемоизирована
   const handleOrdersUpdate = useCallback((updatedOrders) => {
     if (Array.isArray(updatedOrders)) {
-      // console.log('Layout: Updating allOrders', updatedOrders);
+      console.log('Layout: received orders from DataTable:', updatedOrders.length);
       setAllOrders(updatedOrders);
     }
   }, []); // Массив зависимостей пуст, т.к. setAllOrders стабилен
@@ -105,14 +141,14 @@ export default function Layout({ isAuthenticated, user }) {
   }, []); // dataTableRef стабилен, поэтому массив зависимостей пуст
 
   // Функция для перемещения заказа между датами
-  const handleOrderMove = useCallback(async (order, sourceDateStr, targetDateStr) => {
+  const handleOrderMove = useCallback(async (order, sourceDateStr, targetDateStr, plannedDateColumn = "Планируемая дата выдачи") => {
     console.log('handleOrderMove called:', order, sourceDateStr, targetDateStr);
     
     if (dataTableRef.current && typeof dataTableRef.current.updateOrderFields === 'function') {
       try {
         // Обновляем планируемую дату выдачи заказа с таймаутом
         const fieldsToUpdate = { 
-          "Планируемая дата выдачи": targetDateStr 
+          [plannedDateColumn || "Планируемая дата выдачи"]: targetDateStr 
         };
         
         // Добавляем таймаут в 20 секунд
